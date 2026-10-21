@@ -105,10 +105,14 @@ export default function PantallaReportes() {
     <div className="min-h-screen bg-slate-100 font-sans p-6">
       <div className="max-w-7xl mx-auto space-y-6">
 
-       {/* Encabezado Superior con Logo PASE */}
+        {/* Encabezado Superior con Logo PASE y Navegación de Dueño */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-2xl shadow-sm gap-4 border border-slate-200">
           <div className="flex items-center gap-3">
-            <Link href="/caja" className="p-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 transition">
+            <Link 
+              href="/caja" 
+              className="p-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 transition"
+              title="Volver a Caja"
+            >
               <ArrowLeft size={20} />
             </Link>
             
@@ -122,11 +126,24 @@ export default function PantallaReportes() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
+            <Link
+              href="/productos"
+              className="px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs transition"
+            >
+              Inventario
+            </Link>
+            <Link
+              href="/usuarios"
+              className="px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs transition"
+            >
+              Personal y PINs
+            </Link>
+
             <select
               value={cajeroFiltro}
               onChange={(e) => setCajeroFiltro(e.target.value)}
-              className="p-2.5 bg-slate-50 border border-slate-300 rounded-xl font-bold text-sm text-slate-700 flex-1 sm:flex-initial"
+              className="p-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-xs text-slate-700"
             >
               <option value="todos">Todos los Empleados</option>
               {cajerosDisponibles.map((nombre) => (
@@ -137,12 +154,23 @@ export default function PantallaReportes() {
             <button
               onClick={cargarDatos}
               disabled={cargando}
-              className="p-2.5 bg-black hover:bg-slate-800 text-white rounded-xl font-bold text-sm flex items-center gap-2 transition"
+              className="p-2 bg-black hover:bg-slate-800 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition"
             >
-              <RefreshCw size={16} className={cargando ? 'animate-spin' : ''} /> Actualizar
+              <RefreshCw size={14} className={cargando ? 'animate-spin' : ''} /> Actualizar
+            </button>
+
+            <button
+              onClick={() => {
+                window.location.href = '/caja';
+              }}
+              className="p-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 rounded-xl font-bold text-xs transition"
+              title="Salir de la sesión y volver al PIN"
+            >
+              Salir
             </button>
           </div>
         </div>
+
         {/* Tarjetas de Métricas */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">

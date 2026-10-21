@@ -392,6 +392,19 @@ export default function CajaPOS() {
               >
                 Abrir Caja y Comenzar a Cobrar
               </button>
+
+              {/* BOTÓN SALIR AL TECLADO DE PINS (BIEN UBICADO DENTRO DEL FORMULARIO) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setUsuario(null);
+                  setModalApertura(false);
+                  setPinInput('');
+                }}
+                className="w-full mt-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-2.5 rounded-xl text-xs transition"
+              >
+                Cambiar de Usuario / Salir al PIN
+              </button>
             </form>
           </div>
         ) : (
