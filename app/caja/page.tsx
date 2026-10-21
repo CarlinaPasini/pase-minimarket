@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   ShoppingCart, Trash2, CreditCard, DollarSign, Smartphone,
   Split, Search, UserCheck, LogOut,
-  Package, Barcode, Key, Plus, Minus, CheckCircle, Printer
+  Package, Barcode, Key, Plus, Minus, CheckCircle, Printer, MinusCircle
 } from 'lucide-react';
 
 interface ItemVenta {
@@ -29,6 +29,11 @@ export default function CajaPOS() {
   const [montoRecibido, setMontoRecibido] = useState('');
   const [cargando, setCargando] = useState(false);
 
+  // Estados para Retiro / Gasto
+  const [modalGasto, setModalGasto] = useState(false);
+  const [montoGasto, setMontoGasto] = useState('');
+  const [motivoGasto, setMotivoGasto] = useState('');
+
   const [modalMixto, setModalMixto] = useState(false);
   const [pagoEfectivo, setPagoEfectivo] = useState('');
   const [pagoTarjeta, setPagoTarjeta] = useState('');
@@ -43,10 +48,10 @@ export default function CajaPOS() {
   const inputBusquedaRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (usuario && turno && !modalMixto && !modalCierre && !ticketImprimir) {
+    if (usuario && turno && !modalMixto && !modalCierre && !ticketImprimir && !modalGasto) {
       inputBusquedaRef.current?.focus();
     }
-  }, [items, usuario, turno, modalMixto, modalCierre, ticketImprimir]);
+  }, [items, usuario, turno, modalMixto, modalCierre, ticketImprimir, modalGasto]);
 
   useEffect(() => {
     const texto = busqueda.trim();
@@ -71,7 +76,7 @@ export default function CajaPOS() {
   // ATAJOS DE TECLADO (F12, Ctrl+Q, Ctrl+W, Ctrl+E, Ctrl+R, Ctrl+M)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!usuario || !turno || modalCierre || ticketImprimir) return;
+      if (!usuario || !turno || modalCierre || ticketImprimir || modalGasto) return;
 
       if (e.key === 'F12') {
         e.preventDefault();
@@ -111,7 +116,7 @@ export default function CajaPOS() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [items, cargando, turno, usuario, modalMixto, modalCierre, ticketImprimir, montoRecibido]);
+  }, [items, cargando, turno, usuario, modalMixto, modalCierre, ticketImprimir, modalGasto, montoRecibido]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,6 +173,36 @@ export default function CajaPOS() {
       }
     } catch {
       alert('Error al conectar con el servidor');
+    }
+  };
+
+  const handleRegistrarGasto = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!montoGasto || !motivoGasto.trim() || !turno || !usuario) return;
+
+    try {
+      const res = await fetch('/api/movimientos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          turno_id: turno.id,
+          usuario_id: usuario.id,
+          tipo: 'gasto',
+          monto: parseFloat(montoGasto),
+          motivo: motivoGasto,
+        }),
+      });
+
+      if (res.ok) {
+        alert('Retiro / Gasto registrado correctamente.');
+        setModalGasto(false);
+        setMontoGasto('');
+        setMotivoGasto('');
+      } else {
+        alert('Error al registrar la salida de dinero');
+      }
+    } catch {
+      alert('Error de conexión');
     }
   };
 
@@ -378,6 +413,9 @@ export default function CajaPOS() {
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
         {modalApertura ? (
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl text-center">
+            <div className="w-14 h-14 rounded-full overflow-hidden bg-black mx-auto mb-3 border border-slate-200 shadow-sm flex items-center justify-center">
+              <img src="/logo.jpeg" alt="PASE" className="w-full h-full object-cover" />
+            </div>
             <h2 className="text-2xl font-black text-slate-800 mb-1">
               {usuario?.rol === 'admin' ? 'Panel de Administración' : 'Apertura de Caja'}
             </h2>
@@ -431,8 +469,8 @@ export default function CajaPOS() {
           </div>
         ) : (
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl text-center">
-            <div className="w-14 h-14 bg-black text-white font-black text-base rounded-full flex items-center justify-center mx-auto mb-3 shadow">
-              PASE
+            <div className="w-14 h-14 rounded-full overflow-hidden bg-black mx-auto mb-3 border border-slate-200 shadow-sm flex items-center justify-center">
+              <img src="/logo.jpeg" alt="PASE" className="w-full h-full object-cover" />
             </div>
             <h1 className="text-2xl font-black text-slate-800 mb-1">Iniciar Sesión</h1>
             <p className="text-xs text-slate-400 mb-5">Ingrese su PIN de 4 dígitos</p>
@@ -482,21 +520,32 @@ export default function CajaPOS() {
       {/* SECCIÓN IZQUIERDA */}
       <div className="flex-1 flex flex-col min-w-0">
         <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 mb-2.5 space-y-2.5">
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-black text-xs tracking-tighter">
-              PASE
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-8 h-8 rounded-full overflow-hidden bg-black flex-shrink-0 border border-slate-200 shadow-sm flex items-center justify-center">
+                <img src="/logo.jpeg" alt="PASE" className="w-full h-full object-cover" />
+              </div>
+              <span className="font-extrabold text-slate-900 text-sm sm:text-base">PASE</span>
+              <span className="text-slate-300">|</span>
+              <span className="text-xs sm:text-sm text-slate-700 font-semibold flex items-center gap-1">
+                <UserCheck size={15} className="text-blue-600" /> {usuario.nombre}
+              </span>
+              <span className="bg-purple-100 text-purple-700 font-black text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md uppercase">
+                {usuario.rol}
+              </span>
+              <span className="bg-slate-100 text-slate-600 font-bold text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md">
+                Turno #{turno.id}
+              </span>
             </div>
-            <span className="font-extrabold text-slate-900 text-sm sm:text-base">PASE</span>
-            <span className="text-slate-300">|</span>
-            <span className="text-xs sm:text-sm text-slate-700 font-semibold flex items-center gap-1">
-              <UserCheck size={15} className="text-blue-600" /> {usuario.nombre}
-            </span>
-            <span className="bg-purple-100 text-purple-700 font-black text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md uppercase">
-              {usuario.rol}
-            </span>
-            <span className="bg-slate-100 text-slate-600 font-bold text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md">
-              Turno #{turno.id}
-            </span>
+
+            {/* BOTÓN DE RETIRO / GASTO */}
+            <button
+              onClick={() => setModalGasto(true)}
+              className="bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition border border-amber-200"
+              title="Registrar pago a proveedor o salida de caja"
+            >
+              <MinusCircle size={15} /> Retiro / Gasto
+            </button>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -534,7 +583,7 @@ export default function CajaPOS() {
 
             <button
               onClick={abrirCierreTurno}
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 sm:py-2 rounded-xl transition"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 sm:py-2 rounded-xl transition ml-auto"
             >
               <LogOut size={14} /> Cerrar Turno / Arqueo
             </button>
@@ -695,6 +744,53 @@ export default function CajaPOS() {
           </button>
         </div>
       </div>
+
+      {/* MODAL RETIRO / GASTO DE CAJA CHICA */}
+      {modalGasto && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <form onSubmit={handleRegistrarGasto} className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
+            <h2 className="text-xl font-black text-slate-800 mb-1">Retiro / Salida de Caja</h2>
+            <p className="text-xs text-slate-500 mb-4">Se descontará del efectivo esperado al cerrar el turno</p>
+
+            <label className="text-xs uppercase font-bold text-slate-400 block mb-1">Monto Retirado ($)</label>
+            <input
+              type="number"
+              value={montoGasto}
+              onChange={(e) => setMontoGasto(e.target.value)}
+              placeholder="$ 0"
+              className="w-full text-2xl font-black p-3 rounded-xl border border-slate-300 text-center mb-3 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              autoFocus
+              required
+            />
+
+            <label className="text-xs uppercase font-bold text-slate-400 block mb-1">Motivo / Proveedor</label>
+            <input
+              type="text"
+              value={motivoGasto}
+              onChange={(e) => setMotivoGasto(e.target.value)}
+              placeholder="Ej: Pago panadería / Hielo"
+              className="w-full p-2.5 rounded-xl border border-slate-300 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              required
+            />
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setModalGasto(false)}
+                className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="w-2/3 bg-amber-600 hover:bg-amber-700 text-white font-black py-2.5 rounded-xl text-sm shadow transition"
+              >
+                Confirmar Salida
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* MODAL PAGO MIXTO */}
       {modalMixto && (
@@ -867,4 +963,4 @@ export default function CajaPOS() {
       )}
     </div>
   );
-} 
+}
