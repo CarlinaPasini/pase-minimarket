@@ -809,39 +809,65 @@ export default function CajaPOS() {
           </div>
         </div>
       )}
-
-      {/* MODAL CIERRE DE TURNO Y ARQUEO */}
+{/* MODAL CIERRE DE TURNO Y ARQUEO DISCRIMINADO */}
       {modalCierre && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
-            <h2 className="text-xl font-black text-slate-800 mb-1">Cierre de Caja</h2>
-            <p className="text-xs text-slate-500 mb-4">Turno #{turno.id} — {usuario.nombre}</p>
+            <h2 className="text-xl font-black text-slate-800 mb-1">Cierre de Caja y Arqueo</h2>
+            <p className="text-xs text-slate-500 mb-3">Turno #{turno.id} — {usuario.nombre}</p>
 
-            {resumenCierre && (
-              <div className="bg-slate-50 p-3 rounded-2xl border text-xs space-y-1.5 mb-4 font-semibold text-slate-600">
-                <div className="flex justify-between">
-                  <span>Fondo Inicial:</span>
-                  <span className="font-bold text-slate-800">${parseFloat(resumenCierre.turno.monto_inicial).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-emerald-700">
-                  <span>Ventas Efectivo:</span>
-                  <span className="font-bold">${parseFloat(resumenCierre.totales.total_efectivo).toLocaleString()}</span>
-                </div>
-                <div className="border-t pt-1 flex justify-between font-black text-slate-900 text-sm">
-                  <span>Efectivo Esperado:</span>
-                  <span className="text-emerald-600">${resumenCierre.efectivoEsperado.toLocaleString()}</span>
-                </div>
-              </div>
-            )}
-
-            <label className="text-xs font-bold text-slate-700 block mb-1">Dinero contado en mano ($)</label>
+            <label className="text-xs font-bold text-slate-700 block mb-1">
+              Dinero total contado en gaveta ($):
+            </label>
             <input
               type="number"
               value={montoDeclarado}
               onChange={(e) => setMontoDeclarado(e.target.value)}
               placeholder="$ 0"
-              className="w-full text-2xl font-black p-3 rounded-xl border border-slate-300 text-center mb-4 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+              autoFocus
+              className="w-full text-2xl font-black p-3 rounded-xl border border-slate-300 text-center mb-3 focus:ring-2 focus:ring-rose-500 focus:outline-none"
             />
+
+            {/* DISCRIMINACIÓN AUTOMÁTICA DEL FONDO Y LA RECAUDACIÓN */}
+            {resumenCierre && (
+              <div className="bg-slate-50 p-3 rounded-2xl border text-xs space-y-2 mb-4 font-semibold text-slate-600">
+                <div className="flex justify-between text-slate-700">
+                  <span>Fondo de cambio (a dejar en caja):</span>
+                  <span className="font-bold text-slate-900">
+                    ${parseFloat(resumenCierre.turno.monto_inicial).toLocaleString()}
+                  </span>
+                </div>
+
+                <div className="flex justify-between text-blue-700 font-bold border-t pt-1.5">
+                  <span>Recaudación a rendir / entregar:</span>
+                  <span className="font-black text-sm">
+                    ${Math.max(0, (parseFloat(montoDeclarado) || 0) - parseFloat(resumenCierre.turno.monto_inicial)).toLocaleString()}
+                  </span>
+                </div>
+
+                <div className="flex justify-between text-emerald-700 pt-1">
+                  <span>Ventas en Efectivo del turno:</span>
+                  <span className="font-bold">${parseFloat(resumenCierre.totales.total_efectivo).toLocaleString()}</span>
+                </div>
+
+                {/* COMPARACIÓN DE DIFERENCIA */}
+                {parseFloat(montoDeclarado) > 0 && (
+                  <div className="border-t pt-1.5 flex justify-between text-xs font-black">
+                    <span>Resultado arqueo:</span>
+                    {(() => {
+                      const fondo = parseFloat(resumenCierre.turno.monto_inicial) || 0;
+                      const aRendir = (parseFloat(montoDeclarado) || 0) - fondo;
+                      const ventasEsperadas = (parseFloat(resumenCierre.totales.total_efectivo) || 0) - (parseFloat(resumenCierre.totalEgresos) || 0);
+                      const dif = aRendir - ventasEsperadas;
+
+                      if (dif === 0) return <span className="text-emerald-600">✓ Caja exacta ($0)</span>;
+                      if (dif > 0) return <span className="text-blue-600">Sobra: +${dif.toLocaleString()}</span>;
+                      return <span className="text-rose-600">Falta: -${Math.abs(dif).toLocaleString()}</span>;
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex gap-2">
               <button
@@ -852,7 +878,8 @@ export default function CajaPOS() {
               </button>
               <button
                 onClick={handleConfirmarCierre}
-                className="w-2/3 bg-rose-600 hover:bg-rose-700 text-white font-black py-2.5 rounded-xl text-sm shadow transition"
+                disabled={!montoDeclarado}
+                className="w-2/3 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white font-black py-2.5 rounded-xl text-sm shadow transition"
               >
                 Confirmar Cierre
               </button>
