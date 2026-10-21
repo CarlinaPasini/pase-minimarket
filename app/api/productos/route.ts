@@ -9,43 +9,51 @@ export async function GET(request: Request) {
   const esAutocompletar = searchParams.get('autocomplete') === 'true';
 
   try {
-    // Si no hay término de búsqueda, devolvemos los primeros 100 ordenados
+    // Si no hay término de búsqueda, devolvemos el catálogo completo ordenado
     if (!busqueda) {
       const res = await query(
         `SELECT id, codigo_barras, nombre, precio_costo, precio_venta, stock 
          FROM productos 
          WHERE activo = TRUE 
          ORDER BY nombre ASC 
-         LIMIT 80000`
+         LIMIT 5000`
       );
       return NextResponse.json(res.rows);
     }
 
-    // A) Búsqueda para el autocompletado en la Caja (dropdown rápido)
+    // A) Búsqueda para autocompletado en Caja (dropdown rápido)
     if (esAutocompletar) {
       const res = await query(
         `SELECT id, codigo_barras, nombre, precio_venta, stock 
          FROM productos 
          WHERE activo = TRUE 
-           AND (nombre ILIKE $1 OR codigo_barras LIKE $2)
+           AND (
+             nombre ILIKE $1 
+             OR codigo_barras ILIKE $1 
+             OR $2 = ANY(string_to_array(replace(codigo_barras, ' ', ''), ','))
+           )
          ORDER BY nombre ASC 
          LIMIT 10`,
-        [`%${busqueda}%`, `${busqueda}%`]
+        [`%${busqueda}%`, busqueda]
       );
       return NextResponse.json(res.rows);
     }
 
-    // B) Búsqueda para el Catálogo / Inventario o escaneo de Caja:
-    // Si la búsqueda coincide con un código de barras exacto:
+    // B) Búsqueda por escaneo de lector o código exacto (soporta códigos con coma)
     let resExacto = await query(
       `SELECT id, codigo_barras, nombre, precio_costo, precio_venta, stock 
        FROM productos 
-       WHERE codigo_barras = $1 AND activo = TRUE`,
-      [busqueda]
+       WHERE activo = TRUE 
+         AND (
+           codigo_barras = $1 
+           OR $1 = ANY(string_to_array(replace(codigo_barras, ' ', ''), ','))
+           OR codigo_barras ILIKE $2
+         )
+       LIMIT 1`,
+      [busqueda, `%${busqueda}%`]
     );
 
     if (resExacto.rows.length > 0) {
-      // Si la llamada espera un listado o un elemento individual
       return NextResponse.json(resExacto.rows);
     }
 
@@ -54,10 +62,14 @@ export async function GET(request: Request) {
       `SELECT id, codigo_barras, nombre, precio_costo, precio_venta, stock 
        FROM productos 
        WHERE activo = TRUE 
-         AND (nombre ILIKE $1 OR codigo_barras ILIKE $1)
+         AND (
+           nombre ILIKE $1 
+           OR codigo_barras ILIKE $1 
+           OR $2 = ANY(string_to_array(replace(codigo_barras, ' ', ''), ','))
+         )
        ORDER BY nombre ASC 
        LIMIT 100`,
-      [`%${busqueda}%`]
+      [`%${busqueda}%`, busqueda]
     );
 
     return NextResponse.json(resLista.rows);

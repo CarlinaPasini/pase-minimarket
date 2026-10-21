@@ -71,13 +71,20 @@ export default function GestionProductos() {
     }
     const residuo = suma % 10;
     const verificador = residuo === 0 ? 0 : 10 - residuo;
-    setCodigoBarras(`${cuerpo}${verificador}`);
+    const nuevoCodigo = `${cuerpo}${verificador}`;
+
+    // Si ya tiene códigos previos, lo añade separado por coma
+    if (codigoBarras.trim()) {
+      setCodigoBarras(`${codigoBarras.trim()}, ${nuevoCodigo}`);
+    } else {
+      setCodigoBarras(nuevoCodigo);
+    }
   };
 
   const seleccionarParaEditar = (prod: Producto) => {
     setIdEditando(prod.id);
     setNombre(prod.nombre);
-    setCodigoBarras(prod.codigo_barras);
+    setCodigoBarras(prod.codigo_barras || '');
     setPrecioCosto(String(prod.precio_costo));
     setPrecioVenta(String(prod.precio_venta));
     setStock(String(prod.stock));
@@ -202,14 +209,14 @@ export default function GestionProductos() {
           <form onSubmit={handleGuardar} className="space-y-4">
             <div>
               <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
-                Código de Barras <span className="font-normal text-slate-400">(Opcional)</span>
+                Código(s) de Barras <span className="font-normal text-slate-400">(Separe con coma si tiene varios)</span>
               </label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={codigoBarras}
                   onChange={(e) => setCodigoBarras(e.target.value)}
-                  placeholder="Escanee o genere..."
+                  placeholder="Ej: 77912345, 77998765..."
                   className="w-full p-2.5 rounded-xl border border-slate-300 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
                 <button
@@ -221,6 +228,17 @@ export default function GestionProductos() {
                   <RefreshCw size={16} />
                 </button>
               </div>
+
+              {/* Vista previa de etiquetas si ingresa varios códigos */}
+              {codigoBarras.includes(',') && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {codigoBarras.split(',').map((c, i) => c.trim() && (
+                    <span key={i} className="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded text-[11px] font-mono font-bold">
+                      {c.trim()}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>
@@ -312,7 +330,7 @@ export default function GestionProductos() {
             <table className="w-full text-left text-sm border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase text-xs bg-slate-50 sticky top-0">
-                  <th className="py-2.5 px-3">Código</th>
+                  <th className="py-2.5 px-3">Código(s)</th>
                   <th className="py-2.5 px-3">Descripción</th>
                   <th className="py-2.5 px-3 text-right">Costo</th>
                   <th className="py-2.5 px-3 text-right">Venta</th>
@@ -330,7 +348,25 @@ export default function GestionProductos() {
                 ) : (
                   productos.map((prod) => (
                     <tr key={prod.id} className="hover:bg-slate-50 transition">
-                      <td className="py-3 px-3 font-mono text-slate-600 text-xs">{prod.codigo_barras}</td>
+                      
+                      {/* CELDA DE CÓDIGOS MÚLTIPLES DISCRIMINADOS */}
+                      <td className="py-3 px-3 font-mono text-xs text-slate-700">
+                        <div className="flex flex-wrap gap-1 max-w-[220px]">
+                          {prod.codigo_barras ? (
+                            prod.codigo_barras.split(',').map((cod: string, idx: number) => (
+                              <span 
+                                key={idx} 
+                                className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[11px] font-semibold text-slate-700 whitespace-nowrap"
+                              >
+                                {cod.trim()}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-slate-400 italic">Sin código</span>
+                          )}
+                        </div>
+                      </td>
+
                       <td className="py-3 px-3 font-semibold text-slate-800">{prod.nombre}</td>
                       <td className="py-3 px-3 text-right font-mono text-slate-500">${parseFloat(String(prod.precio_costo || 0)).toLocaleString()}</td>
                       <td className="py-3 px-3 text-right font-black text-slate-900">${parseFloat(String(prod.precio_venta)).toLocaleString()}</td>
