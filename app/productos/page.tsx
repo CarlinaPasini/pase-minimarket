@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { PackagePlus, RefreshCw, CheckCircle, AlertCircle, Barcode, Edit2, Trash2, ArrowLeft, Search } from 'lucide-react';
+import { PackagePlus, RefreshCw, CheckCircle, AlertCircle, Barcode, Edit2, Trash2, ArrowLeft, Search, Percent } from 'lucide-react';
 
 interface Producto {
   id: string;
@@ -17,7 +17,6 @@ export default function GestionProductos() {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [busqueda, setBusqueda] = useState('');
   
-  // Estados del formulario
   const [idEditando, setIdEditando] = useState<string | null>(null);
   const [nombre, setNombre] = useState('');
   const [codigoBarras, setCodigoBarras] = useState('');
@@ -47,12 +46,10 @@ export default function GestionProductos() {
     }
   };
 
-  // Carga inicial
   useEffect(() => {
     cargarProductos();
   }, []);
 
-  // Búsqueda en vivo en la base de datos al tipear
   useEffect(() => {
     const timer = setTimeout(() => {
       cargarProductos(busqueda);
@@ -60,6 +57,16 @@ export default function GestionProductos() {
 
     return () => clearTimeout(timer);
   }, [busqueda]);
+
+  // Cálculo de margen sobre costo: ((Venta - Costo) / Costo) * 100
+  const calcularMargen = (costo: number, venta: number) => {
+    if (!costo || costo <= 0 || !venta) return null;
+    return Math.round(((venta - costo) / costo) * 100);
+  };
+
+  const costoNum = parseFloat(precioCosto) || 0;
+  const ventaNum = parseFloat(precioVenta) || 0;
+  const margenFormulario = calcularMargen(costoNum, ventaNum);
 
   const generarCodigoAutomatico = () => {
     const correlativo = Math.floor(100000 + Math.random() * 900000);
@@ -73,7 +80,6 @@ export default function GestionProductos() {
     const verificador = residuo === 0 ? 0 : 10 - residuo;
     const nuevoCodigo = `${cuerpo}${verificador}`;
 
-    // Si ya tiene códigos previos, lo añade separado por coma
     if (codigoBarras.trim()) {
       setCodigoBarras(`${codigoBarras.trim()}, ${nuevoCodigo}`);
     } else {
@@ -161,7 +167,6 @@ export default function GestionProductos() {
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans p-6">
-      {/* Navegación Superior con Logo PASE */}
       <div className="max-w-7xl mx-auto flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm mb-6 border border-slate-200">
         <div className="flex items-center gap-3">
           <Link href="/caja" className="p-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-600 transition">
@@ -174,7 +179,7 @@ export default function GestionProductos() {
 
           <div>
             <h1 className="text-xl font-black text-slate-900 tracking-tight">PASE MINIMARKET — Catálogo y Stock</h1>
-            <p className="text-xs text-slate-400">Administración de precios, costos e inventario</p>
+            <p className="text-xs text-slate-400">Precios, costos, márgenes de ganancia e inventario</p>
           </div>
         </div>
         
@@ -189,7 +194,6 @@ export default function GestionProductos() {
       </div>
 
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Formulario de Carga / Modificación */}
         <div className="bg-white p-6 rounded-2xl shadow-sm lg:col-span-1 h-fit sticky top-6 border border-slate-200">
           <h2 className="text-xl font-bold text-slate-800 mb-1 flex items-center gap-2">
             <PackagePlus className="text-blue-600" /> 
@@ -229,7 +233,6 @@ export default function GestionProductos() {
                 </button>
               </div>
 
-              {/* Vista previa de etiquetas si ingresa varios códigos */}
               {codigoBarras.includes(',') && (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {codigoBarras.split(',').map((c, i) => c.trim() && (
@@ -275,6 +278,18 @@ export default function GestionProductos() {
               </div>
             </div>
 
+            {/* MARGEN DE GANANCIA CALCULADO EN VIVO */}
+            {margenFormulario !== null && (
+              <div className={`p-2.5 rounded-xl text-xs font-bold flex justify-between items-center ${
+                margenFormulario >= 30 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
+                margenFormulario >= 15 ? 'bg-amber-50 text-amber-800 border border-amber-200' :
+                'bg-rose-50 text-rose-800 border border-rose-200'
+              }`}>
+                <span className="flex items-center gap-1"><Percent size={14} /> Margen Ganancia s/ Costo:</span>
+                <span className="text-sm font-black">+{margenFormulario}%</span>
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Stock Disponible</label>
               <input
@@ -308,7 +323,6 @@ export default function GestionProductos() {
           </form>
         </div>
 
-        {/* Listado con Buscador Dinámico */}
         <div className="bg-white p-6 rounded-2xl shadow-sm lg:col-span-2 flex flex-col border border-slate-200">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
             <h2 className="text-xl font-bold text-slate-800">Catálogo ({productos.length})</h2>
@@ -334,6 +348,7 @@ export default function GestionProductos() {
                   <th className="py-2.5 px-3">Descripción</th>
                   <th className="py-2.5 px-3 text-right">Costo</th>
                   <th className="py-2.5 px-3 text-right">Venta</th>
+                  <th className="py-2.5 px-3 text-center">% Ganancia</th>
                   <th className="py-2.5 px-3 text-right">Stock</th>
                   <th className="py-2.5 px-3 text-center">Acciones</th>
                 </tr>
@@ -341,60 +356,79 @@ export default function GestionProductos() {
               <tbody className="divide-y divide-slate-100">
                 {productos.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-8 text-slate-400 font-bold">
+                    <td colSpan={7} className="text-center py-8 text-slate-400 font-bold">
                       No se encontraron productos con esa descripción o código.
                     </td>
                   </tr>
                 ) : (
-                  productos.map((prod) => (
-                    <tr key={prod.id} className="hover:bg-slate-50 transition">
-                      
-                      {/* CELDA DE CÓDIGOS MÚLTIPLES DISCRIMINADOS */}
-                      <td className="py-3 px-3 font-mono text-xs text-slate-700">
-                        <div className="flex flex-wrap gap-1 max-w-[220px]">
-                          {prod.codigo_barras ? (
-                            prod.codigo_barras.split(',').map((cod: string, idx: number) => (
-                              <span 
-                                key={idx} 
-                                className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[11px] font-semibold text-slate-700 whitespace-nowrap"
-                              >
-                                {cod.trim()}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-slate-400 italic">Sin código</span>
-                          )}
-                        </div>
-                      </td>
+                  productos.map((prod) => {
+                    const c = parseFloat(String(prod.precio_costo || 0));
+                    const v = parseFloat(String(prod.precio_venta || 0));
+                    const m = calcularMargen(c, v);
 
-                      <td className="py-3 px-3 font-semibold text-slate-800">{prod.nombre}</td>
-                      <td className="py-3 px-3 text-right font-mono text-slate-500">${parseFloat(String(prod.precio_costo || 0)).toLocaleString()}</td>
-                      <td className="py-3 px-3 text-right font-black text-slate-900">${parseFloat(String(prod.precio_venta)).toLocaleString()}</td>
-                      <td className="py-3 px-3 text-right">
-                        <span className={`px-2 py-0.5 rounded-lg text-xs font-black ${Number(prod.stock) <= 5 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700'}`}>
-                          {prod.stock}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-center">
-                        <div className="flex justify-center gap-1.5">
-                          <button
-                            onClick={() => seleccionarParaEditar(prod)}
-                            className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg transition"
-                            title="Modificar precio o stock"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleEliminar(prod.id, prod.nombre)}
-                            className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg transition"
-                            title="Eliminar del catálogo"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                    return (
+                      <tr key={prod.id} className="hover:bg-slate-50 transition">
+                        <td className="py-3 px-3 font-mono text-xs text-slate-700">
+                          <div className="flex flex-wrap gap-1 max-w-[200px]">
+                            {prod.codigo_barras ? (
+                              prod.codigo_barras.split(',').map((cod: string, idx: number) => (
+                                <span 
+                                  key={idx} 
+                                  className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[11px] font-semibold text-slate-700 whitespace-nowrap"
+                                >
+                                  {cod.trim()}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-slate-400 italic">Sin código</span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-3 font-semibold text-slate-800">{prod.nombre}</td>
+                        <td className="py-3 px-3 text-right font-mono text-slate-500">${c.toLocaleString()}</td>
+                        <td className="py-3 px-3 text-right font-black text-slate-900">${v.toLocaleString()}</td>
+                        
+                        <td className="py-3 px-3 text-center">
+                          {m !== null ? (
+                            <span className={`px-2 py-0.5 rounded-lg text-xs font-black ${
+                              m >= 35 ? 'bg-emerald-100 text-emerald-800' :
+                              m >= 15 ? 'bg-amber-100 text-amber-800' :
+                              'bg-rose-100 text-rose-800'
+                            }`}>
+                              +{m}%
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 font-mono text-xs">-</span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-3 text-right">
+                          <span className={`px-2 py-0.5 rounded-lg text-xs font-black ${Number(prod.stock) <= 5 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700'}`}>
+                            {prod.stock}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <div className="flex justify-center gap-1.5">
+                            <button
+                              onClick={() => seleccionarParaEditar(prod)}
+                              className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg transition"
+                              title="Modificar precio o stock"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleEliminar(prod.id, prod.nombre)}
+                              className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg transition"
+                              title="Eliminar del catálogo"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
