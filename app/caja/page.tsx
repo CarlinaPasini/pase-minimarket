@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   ShoppingCart, Trash2, CreditCard, DollarSign, Smartphone,
   Split, Search, UserCheck, LogOut,
-  Package, Barcode, Key, Plus, Minus, CheckCircle, Printer, Lock
+  Package, Barcode, Key, Plus, Minus, CheckCircle, Printer
 } from 'lucide-react';
 
 interface ItemVenta {
@@ -40,7 +40,7 @@ export default function CajaPOS() {
   // Ticket Térmico
   const [ticketImprimir, setTicketImprimir] = useState<any>(null);
 
-  // Cierre y Arqueo
+  // Cierre y Arqueo Discriminado
   const [modalCierre, setModalCierre] = useState(false);
   const [resumenCierre, setResumenCierre] = useState<any>(null);
   const [montoDeclarado, setMontoDeclarado] = useState('');
@@ -237,7 +237,7 @@ export default function CajaPOS() {
     }
   };
 
-  // COBRAR PAGO MIXTO VALIDADO
+  // COBRAR PAGO MIXTO VALIDADO EXACTO
   const procesarCobroMixto = async () => {
     if (sumaMixta !== total) {
       if (sumaMixta > total) {
@@ -341,34 +341,59 @@ export default function CajaPOS() {
     }
   };
 
-  // PANTALLA 1: SI NO ESTÁ LOGUEADO, MUESTRA LOGIN DE PIN DIRECTO
+  // PANTALLA 1: LOGIN POR PIN O MODAL DE APERTURA / SUPERVISIÓN
   if (!usuario || !turno) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        {/* MODAL FONDO INICIAL (SI YA INGRESO PIN PERO NO TIENE TURNO ABIERTO) */}
+        {/* MODAL APERTURA DE TURNO O MODO MONITOREO */}
         {modalApertura ? (
-          <form onSubmit={handleAbrirCaja} className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl text-center">
-            <h2 className="text-2xl font-black text-slate-800 mb-1">Apertura de Caja</h2>
-            <p className="text-xs text-slate-500 mb-4">
-              Cajero: <strong className="text-slate-800">{usuario?.nombre}</strong>
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl text-center">
+            <h2 className="text-2xl font-black text-slate-800 mb-1">
+              {usuario?.rol === 'admin' ? 'Panel de Administración' : 'Apertura de Caja'}
+            </h2>
+            <p className="text-xs text-slate-500 mb-5">
+              Bienvenido, <strong className="text-slate-800">{usuario?.nombre}</strong>
             </p>
-            <label className="text-xs font-bold text-slate-600 block mb-1 text-left">Fondo inicial de cambio ($)</label>
-            <input
-              type="number"
-              required
-              value={fondoInicial}
-              onChange={(e) => setFondoInicial(e.target.value)}
-              placeholder="Ej: 10000"
-              autoFocus
-              className="w-full text-3xl font-black p-3.5 rounded-2xl border-2 border-slate-300 text-center mb-5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            />
-            <button
-              type="submit"
-              className="w-full bg-[#10b981] hover:bg-[#059669] text-white font-black py-4 rounded-2xl text-base shadow transition"
-            >
-              Comenzar Turno
-            </button>
-          </form>
+
+            {/* ACCESO EXCLUSIVO DE DUEÑO: MONITOREAR SIN ABRIR CAJA */}
+            {usuario?.rol === 'admin' && (
+              <div className="mb-5 pb-5 border-b border-slate-100">
+                <Link
+                  href="/reportes"
+                  className="w-full bg-[#0f172a] hover:bg-black text-white font-black py-3.5 px-4 rounded-2xl text-sm flex items-center justify-center gap-2 shadow-lg transition"
+                >
+                  <DollarSign size={18} className="text-emerald-400" />
+                  Monitorear en Vivo (Sin Abrir Caja)
+                </Link>
+                <p className="text-[11px] text-slate-400 mt-2">
+                  Ver ventas del día, arqueos y cajas activas de tus empleados.
+                </p>
+              </div>
+            )}
+
+            {/* FORMULARIO DE APERTURA CON FONDO */}
+            <form onSubmit={handleAbrirCaja} className="space-y-3">
+              <label className="text-xs font-bold text-slate-600 block text-left">
+                {usuario?.rol === 'admin' 
+                  ? 'O inicia un turno para cobrar en mostrador:' 
+                  : 'Fondo inicial de cambio ($):'}
+              </label>
+              <input
+                type="number"
+                required
+                value={fondoInicial}
+                onChange={(e) => setFondoInicial(e.target.value)}
+                placeholder="$ 0"
+                className="w-full text-2xl font-black p-3 rounded-2xl border-2 border-slate-300 text-center mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <button
+                type="submit"
+                className="w-full bg-[#10b981] hover:bg-[#059669] text-white font-black py-3.5 rounded-2xl text-sm shadow transition"
+              >
+                Abrir Caja y Comenzar a Cobrar
+              </button>
+            </form>
+          </div>
         ) : (
           /* LOGIN POR PIN RÁPIDO */
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl text-center">
@@ -395,7 +420,6 @@ export default function CajaPOS() {
                 className="w-full text-4xl tracking-widest font-black text-center p-3.5 rounded-2xl border-2 border-slate-300 focus:outline-none focus:border-blue-500 bg-slate-50"
               />
 
-              {/* Botonera de teclado rápido para pantalla táctil */}
               <div className="grid grid-cols-3 gap-2 pt-2">
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9, 'C', 0, 'OK'].map((btn) => (
                   <button
@@ -419,12 +443,12 @@ export default function CajaPOS() {
     );
   }
 
-  // PANTALLA 2: CAJA EN VIVO CON PERMISOS Y TURNOS
+  // PANTALLA 2: CAJA RESPONSIVE CON ACCESOS SEGÚN ROL
   return (
     <div className="flex flex-col lg:flex-row min-h-screen lg:h-screen w-full bg-slate-100 font-sans antialiased overflow-y-auto lg:overflow-hidden p-2 sm:p-3 gap-3">
       {/* SECCIÓN IZQUIERDA */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* ENCABEZADO SUPERIOR CON CONTROL POR ROLES */}
+        {/* BARRA SUPERIOR CON CONTROLES */}
         <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 mb-2.5 space-y-2.5">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-black text-xs tracking-tighter">
@@ -443,7 +467,6 @@ export default function CajaPOS() {
             </span>
           </div>
 
-          {/* Botones de Administración (SOLO VISIBLE PARA ADMIN O ENCARGADO) */}
           <div className="flex items-center gap-2 flex-wrap">
             {usuario.rol === 'admin' && (
               <Link
@@ -521,7 +544,7 @@ export default function CajaPOS() {
           )}
         </div>
 
-        {/* LISTADO DE PRODUCTOS */}
+        {/* LISTA DE ITEMS */}
         <div className="flex-1 bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 overflow-y-auto min-h-[220px]">
           {items.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2 sm:gap-3 py-10 lg:py-0">
@@ -555,7 +578,7 @@ export default function CajaPOS() {
         </div>
       </div>
 
-      {/* SECCIÓN DERECHA: TOTAL Y ACCIONES */}
+      {/* SECCIÓN DERECHA */}
       <div className="w-full lg:w-[330px] xl:w-[360px] flex-shrink-0 bg-white rounded-2xl border border-slate-200 p-4 flex flex-col justify-between shadow-sm">
         <div>
           <div className="bg-[#0f172a] text-white p-4 sm:p-5 rounded-2xl mb-3 text-center">
@@ -682,7 +705,6 @@ export default function CajaPOS() {
                 />
               </div>
 
-              {/* SEMÁFORO DE MONTO EXACTO */}
               <div className="p-3 rounded-xl border text-xs font-bold space-y-1 bg-slate-50">
                 <div className="flex justify-between">
                   <span>Asignado:</span>
@@ -721,7 +743,7 @@ export default function CajaPOS() {
         </div>
       )}
 
-      {/* MODAL TICKET / COMPROBANTE POSVENTA */}
+      {/* MODAL TICKET POSVENTA */}
       {ticketImprimir && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl p-6 shadow-2xl w-full max-w-xs text-center animate-fade-in">
@@ -809,7 +831,8 @@ export default function CajaPOS() {
           </div>
         </div>
       )}
-{/* MODAL CIERRE DE TURNO Y ARQUEO DISCRIMINADO */}
+
+      {/* MODAL CIERRE DE TURNO Y ARQUEO DISCRIMINADO */}
       {modalCierre && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
