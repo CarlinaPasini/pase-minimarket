@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import {
   ShoppingCart, Trash2, CreditCard, DollarSign, Smartphone,
-  CheckCircle, Split, Search, UserCheck, LogOut,
-  Package, Barcode, Key, MinusCircle, Plus, Minus
+  Split, Search, UserCheck, LogOut,
+  Package, Barcode, Key, Plus, Minus
 } from 'lucide-react';
 
 interface ItemVenta {
@@ -27,12 +28,9 @@ export default function CajaPOS() {
   const [pagoTarjeta, setPagoTarjeta] = useState('');
   const [pagoTransferencia, setPagoTransferencia] = useState('');
 
-  const [modalGasto, setModalGasto] = useState(false);
-  const [montoGasto, setMontoGasto] = useState('');
-  const [motivoGasto, setMotivoGasto] = useState('');
-
   const [modalCierre, setModalCierre] = useState(false);
   const [montoDeclarado, setMontoDeclarado] = useState('');
+  const [modalPersonal, setModalPersonal] = useState(false);
 
   const inputBusquedaRef = useRef<HTMLInputElement>(null);
 
@@ -40,7 +38,7 @@ export default function CajaPOS() {
     inputBusquedaRef.current?.focus();
   }, [items]);
 
-  // Autocompletado en vivo mientras escribes
+  // Autocompletado mientras escribes (mínimo 2 letras)
   useEffect(() => {
     const texto = busqueda.trim();
     if (texto.length >= 2) {
@@ -134,7 +132,7 @@ export default function CajaPOS() {
         alert('Error al registrar la venta');
       }
     } catch {
-      alert('Error de red');
+      alert('Error de conexión');
     } finally {
       setCargando(false);
     }
@@ -179,7 +177,7 @@ export default function CajaPOS() {
         setPagoTarjeta('');
         setPagoTransferencia('');
       } else {
-        alert('Error al registrar pago mixto');
+        alert('Error al registrar el cobro mixto');
       }
     } catch {
       alert('Error de conexión');
@@ -191,43 +189,69 @@ export default function CajaPOS() {
   const totalParcialMixto = (parseFloat(pagoEfectivo) || 0) + (parseFloat(pagoTarjeta) || 0) + (parseFloat(pagoTransferencia) || 0);
 
   return (
-    <div className="flex w-screen h-screen bg-slate-100 font-sans antialiased overflow-hidden">
-      {/* SECCIÓN PRINCIPAL IZQUIERDA */}
-      <div className="flex-1 flex flex-col p-3 overflow-hidden border-r border-slate-200">
+    <div className="flex flex-col lg:flex-row min-h-screen lg:h-screen w-full bg-slate-100 font-sans antialiased overflow-y-auto lg:overflow-hidden p-2 sm:p-3 gap-3">
+      {/* SECCIÓN IZQUIERDA: CABECERA, BUSCADOR Y LISTA DE COMPRA */}
+      <div className="flex-1 flex flex-col min-w-0">
         {/* ENCABEZADO SUPERIOR */}
-        <div className="flex flex-wrap justify-between items-center bg-white p-2.5 rounded-2xl shadow-sm border border-slate-200 mb-2.5 gap-2">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-black text-xs">PASE</div>
-            <span className="font-bold text-slate-800 text-sm">PASE</span>
+        <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 mb-2.5 space-y-2.5">
+          {/* Fila 1: Datos del local y usuario */}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-black text-xs tracking-tighter">
+              PASE
+            </div>
+            <span className="font-extrabold text-slate-900 text-sm sm:text-base">PASE</span>
             <span className="text-slate-300">|</span>
-            <span className="text-xs text-slate-600 flex items-center gap-1"><UserCheck size={13}/> Dueño (Admin...)</span>
-            <span className="bg-purple-100 text-purple-700 font-black text-[10px] px-1.5 py-0.5 rounded">ADMIN</span>
-            <span className="bg-slate-100 text-slate-600 font-bold text-[10px] px-1 py-0.5 rounded">#1</span>
+            <span className="text-xs sm:text-sm text-slate-700 font-semibold flex items-center gap-1">
+              <UserCheck size={15} className="text-blue-600" /> Dueño (Administrador)
+            </span>
+            <span className="bg-purple-100 text-purple-700 font-black text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md">
+              ADMIN
+            </span>
+            <span className="bg-slate-100 text-slate-600 font-bold text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md">
+              Turno #2
+            </span>
           </div>
 
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <button onClick={() => setModalGasto(true)} className="flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1.5 rounded-lg transition">
-              <MinusCircle size={13}/> Gasto
+          {/* Fila 2: Botón Personal y PINs */}
+          <div>
+            <button
+              onClick={() => setModalPersonal(true)}
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 px-3 py-1.5 rounded-xl transition shadow-sm"
+            >
+              <Key size={14} className="text-slate-500" /> Personal y PINs
             </button>
-            <button onClick={() => setModalCierre(true)} className="flex items-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1.5 rounded-lg transition">
-              $ Cajas
+          </div>
+
+          {/* Fila 3: Botones de acciones */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => alert('Control y Arqueo de Cajas')}
+              className="flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 sm:py-2 rounded-xl transition"
+            >
+              $ Control de Cajas
             </button>
-            <button onClick={() => window.location.href = '/productos'} className="flex items-center gap-1 text-xs font-bold bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 px-2.5 py-1.5 rounded-lg transition">
-              <Package size={13}/> Stock
-            </button>
-            <button onClick={() => alert('Generador de etiquetas')} className="flex items-center gap-1 text-xs font-bold bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 px-2.5 py-1.5 rounded-lg transition">
-              <Barcode size={13}/> Etiquetas
-            </button>
-            <button onClick={() => alert('Gestión de personal y PINs')} className="flex items-center gap-1 text-xs font-bold bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 px-2.5 py-1.5 rounded-lg transition">
-              <Key size={13}/> Personal
-            </button>
-            <button onClick={() => setModalCierre(true)} className="flex items-center gap-1 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-lg transition">
-              <LogOut size={13}/> Cerrar
+            <Link
+              href="/productos"
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 sm:py-2 rounded-xl transition shadow-sm"
+            >
+              <Package size={14} className="text-slate-500" /> Inventario
+            </Link>
+            <Link
+              href="/etiquetas"
+              className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 sm:py-2 rounded-xl transition shadow-sm"
+            >
+              <Barcode size={14} className="text-slate-500" /> Etiquetas
+            </Link>
+            <button
+              onClick={() => setModalCierre(true)}
+              className="flex items-center gap-1.5 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 sm:py-2 rounded-xl transition"
+            >
+              <LogOut size={14} /> Cerrar Turno / Arqueo
             </button>
           </div>
         </div>
 
-        {/* INPUT DE BÚSQUEDA CON SUGERENCIAS FLOTANTES */}
+        {/* INPUT DE BÚSQUEDA */}
         <div className="relative mb-2.5">
           <form onSubmit={handleBuscar}>
             <Search className="absolute left-3.5 top-3 text-blue-500" size={20} />
@@ -237,24 +261,24 @@ export default function CajaPOS() {
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               placeholder="Pase lector o empiece a escribir el nombre..."
-              className="w-full bg-white text-base font-medium pl-11 pr-4 py-2.5 rounded-2xl border-2 border-blue-500 focus:outline-none shadow-sm"
+              className="w-full bg-white text-sm sm:text-base font-medium pl-11 pr-4 py-2.5 sm:py-3 rounded-2xl border-2 border-blue-500 focus:outline-none shadow-sm"
             />
           </form>
 
-          {/* MENÚ DE SUGERENCIAS EN TIEMPO REAL */}
+          {/* DESPLEGABLE EN VIVO */}
           {sugerencias.length > 0 && (
-            <div className="absolute left-0 right-0 top-12 bg-white border border-slate-200 rounded-2xl shadow-2xl z-40 max-h-64 overflow-y-auto">
+            <div className="absolute left-0 right-0 top-14 bg-white border border-slate-200 rounded-2xl shadow-2xl z-40 max-h-56 overflow-y-auto">
               {sugerencias.map((s) => (
                 <div
                   key={s.id}
                   onClick={() => agregarProducto(s)}
-                  className="p-3 hover:bg-blue-50 cursor-pointer flex justify-between items-center border-b border-slate-100 last:border-0"
+                  className="p-2.5 sm:p-3 hover:bg-blue-50 cursor-pointer flex justify-between items-center border-b border-slate-100 last:border-0"
                 >
                   <div>
                     <p className="font-bold text-sm text-slate-800">{s.nombre}</p>
                     <span className="text-xs text-slate-400 font-mono">{s.codigo_barras}</span>
                   </div>
-                  <span className="font-black text-blue-600 text-base">
+                  <span className="font-black text-blue-600 text-sm sm:text-base">
                     ${parseFloat(String(s.precio_venta)).toLocaleString()}
                   </span>
                 </div>
@@ -263,50 +287,70 @@ export default function CajaPOS() {
           )}
         </div>
 
-        {/* LISTADO DE ITEMS EN VENTA */}
-        <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-          {items.map(item => (
-            <div key={item.id} className="bg-white border-2 border-blue-100 p-3.5 rounded-2xl flex justify-between items-center shadow-sm">
-              <div className="max-w-[65%]">
-                <h3 className="font-extrabold text-slate-800 text-base leading-tight">{item.nombre}</h3>
-                <span className="text-xs font-semibold text-slate-500">${item.precio.toLocaleString()} x {item.cantidad} unidad(es)</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5 bg-slate-100 rounded-xl p-1">
-                  <button onClick={() => modificarCantidad(item.id, -1)} className="p-1 bg-white rounded-lg hover:bg-slate-200 shadow-sm"><Minus size={13}/></button>
-                  <span className="font-black text-xs px-1.5">{item.cantidad}</span>
-                  <button onClick={() => modificarCantidad(item.id, 1)} className="p-1 bg-white rounded-lg hover:bg-slate-200 shadow-sm"><Plus size={13}/></button>
-                </div>
-                <span className="text-xl font-black text-blue-600 w-24 text-right">${(item.precio * item.cantidad).toLocaleString()}</span>
-              </div>
+        {/* CONTENEDOR DE PRODUCTOS */}
+        <div className="flex-1 bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 overflow-y-auto min-h-[220px]">
+          {items.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2 sm:gap-3 py-10 lg:py-0">
+              <ShoppingCart size={54} className="stroke-1 text-slate-300" />
+              <p className="text-base sm:text-lg font-bold text-slate-400 text-center">
+                Pase un código de barras o escriba un nombre
+              </p>
             </div>
-          ))}
+          ) : (
+            <div className="space-y-2">
+              {items.map(item => (
+                <div key={item.id} className="bg-slate-50 border border-slate-200 p-3 rounded-xl flex justify-between items-center">
+                  <div className="max-w-[60%] sm:max-w-[65%]">
+                    <h3 className="font-extrabold text-slate-800 text-sm sm:text-base leading-tight">{item.nombre}</h3>
+                    <span className="text-xs font-semibold text-slate-500">${item.precio.toLocaleString()} x {item.cantidad} un.</span>
+                  </div>
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-1">
+                      <button onClick={() => modificarCantidad(item.id, -1)} className="p-1 hover:bg-slate-100 rounded"><Minus size={12}/></button>
+                      <span className="font-black text-xs px-1">{item.cantidad}</span>
+                      <button onClick={() => modificarCantidad(item.id, 1)} className="p-1 hover:bg-slate-100 rounded"><Plus size={12}/></button>
+                    </div>
+                    <span className="text-base sm:text-xl font-black text-blue-600 w-20 sm:w-24 text-right">
+                      ${(item.precio * item.cantidad).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* SECCIÓN LATERAL DERECHA (ANCHO ADAPTATIVO FLUIDO) */}
-      <div className="w-[310px] xl:w-[360px] flex-shrink-0 bg-white p-4 flex flex-col justify-between border-l border-slate-200">
+      {/* SECCIÓN DERECHA: TOTAL Y BOTONERA (RESPONSIVE EN MÓVILES) */}
+      <div className="w-full lg:w-[330px] xl:w-[360px] flex-shrink-0 bg-white rounded-2xl border border-slate-200 p-4 flex flex-col justify-between shadow-sm">
         <div>
-          <div className="bg-[#0f172a] text-white p-4 rounded-2xl mb-3 text-center shadow-sm">
-            <span className="text-[11px] tracking-wider uppercase font-extrabold text-slate-400 block mb-0.5">TOTAL A COBRAR</span>
-            <span className="text-4xl xl:text-5xl font-black text-[#10b981]">${total.toLocaleString()}</span>
+          {/* TOTAL A COBRAR */}
+          <div className="bg-[#0f172a] text-white p-4 sm:p-5 rounded-2xl mb-3 text-center">
+            <span className="text-[11px] tracking-wider uppercase font-extrabold text-slate-400 block mb-1">
+              TOTAL A COBRAR
+            </span>
+            <span className="text-4xl sm:text-5xl font-black text-[#10b981]">
+              ${total.toLocaleString()}
+            </span>
           </div>
 
-          <label className="text-xs font-bold text-slate-700 block mb-1">¿Con cuánto paga? (Efectivo)</label>
-          <div className="relative mb-2.5">
+          <label className="text-xs sm:text-sm font-bold text-slate-700 block mb-1">
+            ¿Con cuánto paga? (Efectivo)
+          </label>
+          <div className="bg-slate-50 border border-slate-300 rounded-2xl p-2.5 sm:p-3 mb-2.5">
             <input
               type="number"
               value={montoRecibido}
               onChange={(e) => setMontoRecibido(e.target.value)}
-              placeholder="0"
-              className="w-full text-xl font-black p-2.5 rounded-xl border border-slate-300 text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder="$ 0"
+              className="w-full text-2xl sm:text-3xl font-black bg-transparent text-center text-slate-800 focus:outline-none"
             />
           </div>
 
           {recibidoNum > total && (
-            <div className="bg-amber-50 border border-amber-200 p-2 rounded-xl mb-2 text-center">
-              <span className="text-[11px] font-bold text-amber-700 block uppercase">Vuelto a entregar</span>
-              <span className="text-xl font-black text-amber-900">${vuelto.toLocaleString()}</span>
+            <div className="bg-amber-50 border border-amber-200 p-2 rounded-xl mb-2.5 text-center">
+              <span className="text-xs font-bold text-amber-700 block uppercase">Vuelto a entregar</span>
+              <span className="text-xl sm:text-2xl font-black text-amber-900">${vuelto.toLocaleString()}</span>
             </div>
           )}
         </div>
@@ -316,7 +360,7 @@ export default function CajaPOS() {
           <button
             onClick={() => procesarCobro('efectivo')}
             disabled={cargando || items.length === 0}
-            className="w-full bg-[#10b981] hover:bg-[#059669] disabled:opacity-50 text-white font-black text-lg py-3.5 rounded-2xl flex items-center justify-center gap-2 transition shadow-sm"
+            className="w-full bg-[#52b788] hover:bg-[#40916c] disabled:opacity-50 text-white font-black text-lg sm:text-xl py-3.5 sm:py-4 rounded-2xl flex items-center justify-center gap-2 transition shadow-sm"
           >
             <DollarSign size={22} /> COBRAR EFECTIVO
           </button>
@@ -325,23 +369,23 @@ export default function CajaPOS() {
             <button
               onClick={() => procesarCobro('tarjeta')}
               disabled={cargando || items.length === 0}
-              className="bg-[#6366f1] hover:bg-[#4f46e5] disabled:opacity-50 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition"
+              className="bg-[#818cf8] hover:bg-[#6366f1] disabled:opacity-50 text-white font-bold text-xs py-2.5 sm:py-3 rounded-xl flex items-center justify-center gap-1.5 transition"
             >
-              <CreditCard size={16} /> Tarjeta
+              <CreditCard size={15} /> Tarjeta
             </button>
             <button
               onClick={() => procesarCobro('transferencia')}
               disabled={cargando || items.length === 0}
-              className="bg-[#0ea5e9] hover:bg-[#0284c7] disabled:opacity-50 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition"
+              className="bg-[#38bdf8] hover:bg-[#0ea5e9] disabled:opacity-50 text-white font-bold text-xs py-2.5 sm:py-3 rounded-xl flex items-center justify-center gap-1.5 transition"
             >
-              <Smartphone size={16} /> Transf. / QR
+              <Smartphone size={15} /> Transferencia / QR
             </button>
           </div>
 
           <button
             onClick={() => setModalMixto(true)}
             disabled={cargando || items.length === 0}
-            className="w-full bg-[#a855f7] hover:bg-[#9333ea] disabled:opacity-50 text-white font-bold text-sm py-3 rounded-xl flex items-center justify-center gap-2 transition"
+            className="w-full bg-[#c084fc] hover:bg-[#a855f7] disabled:opacity-50 text-white font-bold text-sm sm:text-base py-3 rounded-xl flex items-center justify-center gap-2 transition"
           >
             <Split size={18} /> Dividir / Pago Mixto
           </button>
@@ -349,7 +393,7 @@ export default function CajaPOS() {
           <button
             onClick={() => { setItems([]); setMontoRecibido(''); }}
             disabled={items.length === 0}
-            className="w-full bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-600 font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 transition"
+            className="w-full bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-600 font-bold text-xs py-2 sm:py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition"
           >
             <Trash2 size={15} /> Cancelar / Nueva Venta
           </button>
@@ -362,7 +406,9 @@ export default function CajaPOS() {
           <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl">
             <div className="flex justify-between items-center mb-3">
               <h2 className="text-lg font-black text-slate-800">Dividir Pago</h2>
-              <span className="text-xs font-black bg-purple-100 text-purple-700 px-2 py-0.5 rounded">Total: ${total.toLocaleString()}</span>
+              <span className="text-xs font-black bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
+                Total: ${total.toLocaleString()}
+              </span>
             </div>
 
             <div className="space-y-2 mb-4">
@@ -408,52 +454,59 @@ export default function CajaPOS() {
             </div>
 
             <div className="flex gap-2">
-              <button onClick={() => setModalMixto(false)} className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-lg text-sm">
+              <button
+                onClick={() => setModalMixto(false)}
+                className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-lg text-sm"
+              >
                 Volver
               </button>
-              <button onClick={procesarCobroMixto} disabled={cargando || totalParcialMixto < total} className="w-2/3 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white font-bold py-2 rounded-lg text-sm">
-                Confirmar
+              <button
+                onClick={procesarCobroMixto}
+                disabled={cargando || totalParcialMixto < total}
+                className="w-2/3 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white font-bold py-2 rounded-lg text-sm"
+              >
+                Confirmar Cobro
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL GASTO */}
-      {modalGasto && (
+      {/* MODAL PERSONAL Y PINS */}
+      {modalPersonal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl">
-            <h2 className="text-lg font-black text-slate-800 mb-2">Salida de Dinero</h2>
-            <div className="space-y-2">
-              <input
-                type="number"
-                value={montoGasto}
-                onChange={(e) => setMontoGasto(e.target.value)}
-                placeholder="Monto ($)"
-                className="w-full text-base font-bold p-2 rounded-lg border border-slate-300 text-center"
-              />
-              <input
-                type="text"
-                value={motivoGasto}
-                onChange={(e) => setMotivoGasto(e.target.value)}
-                placeholder="Motivo / Proveedor"
-                className="w-full text-sm p-2 rounded-lg border border-slate-300"
-              />
-              <div className="flex gap-2 pt-2">
-                <button onClick={() => setModalGasto(false)} className="w-1/3 bg-slate-100 text-slate-700 font-bold py-2 rounded-lg text-sm">Cancelar</button>
-                <button onClick={() => { alert('Gasto guardado'); setModalGasto(false); }} className="w-2/3 bg-amber-600 text-white font-bold py-2 rounded-lg text-sm">Guardar</button>
+            <h2 className="text-lg font-black text-slate-800 mb-2">Personal y PINs</h2>
+            <div className="space-y-2 text-sm text-slate-600 mb-4">
+              <div className="p-2 bg-slate-50 rounded-lg flex justify-between">
+                <span>Dueño (Admin):</span>
+                <span className="font-mono font-bold">1111</span>
+              </div>
+              <div className="p-2 bg-slate-50 rounded-lg flex justify-between">
+                <span>Encargado:</span>
+                <span className="font-mono font-bold">2222</span>
+              </div>
+              <div className="p-2 bg-slate-50 rounded-lg flex justify-between">
+                <span>Cajera:</span>
+                <span className="font-mono font-bold">3333</span>
               </div>
             </div>
+            <button
+              onClick={() => setModalPersonal(false)}
+              className="w-full bg-slate-800 text-white font-bold py-2 rounded-xl text-sm"
+            >
+              Cerrar
+            </button>
           </div>
         </div>
       )}
 
-      {/* MODAL CIERRE */}
+      {/* MODAL CIERRE DE TURNO */}
       {modalCierre && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl">
-            <h2 className="text-lg font-black text-slate-800 mb-1">Cierre de Caja</h2>
-            <p className="text-xs text-slate-500 mb-3">Efectivo en mano contado</p>
+            <h2 className="text-lg font-black text-slate-800 mb-1">Cierre de Caja y Arqueo</h2>
+            <p className="text-xs text-slate-500 mb-3">Dinero real contado en la gaveta</p>
             <input
               type="number"
               value={montoDeclarado}
@@ -462,8 +515,18 @@ export default function CajaPOS() {
               className="w-full text-2xl font-black p-2.5 rounded-lg border border-slate-300 text-center mb-3"
             />
             <div className="flex gap-2">
-              <button onClick={() => setModalCierre(false)} className="w-1/3 bg-slate-100 text-slate-700 font-bold py-2 rounded-lg text-sm">Volver</button>
-              <button onClick={() => { alert('Caja cerrada con éxito'); window.location.reload(); }} className="w-2/3 bg-rose-600 text-white font-bold py-2 rounded-lg text-sm">Confirmar</button>
+              <button
+                onClick={() => setModalCierre(false)}
+                className="w-1/3 bg-slate-100 text-slate-700 font-bold py-2 rounded-lg text-sm"
+              >
+                Volver
+              </button>
+              <button
+                onClick={() => { alert('Caja cerrada con éxito'); window.location.reload(); }}
+                className="w-2/3 bg-rose-600 text-white font-bold py-2 rounded-lg text-sm"
+              >
+                Confirmar Cierre
+              </button>
             </div>
           </div>
         </div>
