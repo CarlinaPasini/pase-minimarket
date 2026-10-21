@@ -14,7 +14,7 @@ export async function POST(request: Request) {
 
     await client.query('BEGIN');
 
-    // 1. Insertar la cabecera de la venta (con turno y usuario asignados)
+    // 1. Insertar la cabecera de la venta vinculada al turno y usuario real
     const insertVentaText = `
       INSERT INTO ventas (total, metodo_pago, monto_recibido, vuelto, estado, turno_id, usuario_id)
       VALUES ($1, $2, $3, $4, 'completada', $5, $6)
@@ -30,10 +30,10 @@ export async function POST(request: Request) {
     ]);
     const ventaId = resVenta.rows[0].id;
 
-    // 2. Registrar desglose de medios de pago
+    // 2. Registrar desglose de medios de pago en pagos_ventas
     if (pagos && Array.isArray(pagos) && pagos.length > 0) {
       for (const p of pagos) {
-        if (p.monto > 0) {
+        if (Number(p.monto) > 0) {
           await client.query(
             `INSERT INTO pagos_ventas (venta_id, metodo, monto) VALUES ($1, $2, $3)`,
             [ventaId, p.metodo, p.monto]
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. Registrar detalle de venta y descontar stock
+    // 3. Registrar detalle de venta y descontar stock automáticamente
     for (const item of items) {
       const subtotal = item.precio * item.cantidad;
 

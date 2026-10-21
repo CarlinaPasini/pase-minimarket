@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { query } from '../../../lib/db';
 
-// 1. OBTENER RESUMEN DE VENTAS Y EGRESOS DEL TURNO
+// 1. Obtener resumen de caja del turno actual
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const turnoId = searchParams.get('turno_id');
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     }
     const turno = turnoRes.rows[0];
 
-    // Totales de ventas agrupados por medio de pago
+    // Resumen de ventas agrupadas
     const resumenRes = await query(
       `SELECT 
          COALESCE(SUM(total), 0) AS total_vendido,
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
       [turnoId]
     );
 
-    // Total de egresos/gastos registrados durante el turno
+    // Gastos / egresos del turno
     const egresosRes = await query(
       `SELECT COALESCE(SUM(monto), 0) AS total_egresos
        FROM movimientos_caja
@@ -41,7 +41,7 @@ export async function GET(request: Request) {
     const totales = resumenRes.rows[0];
     const totalEgresos = parseFloat(egresosRes.rows[0]?.total_egresos || 0);
 
-    // Efectivo esperado = Fondo Inicial + Ventas en Efectivo - Gastos/Retiros
+    // Efectivo que debe haber en la gaveta
     const efectivoEsperado = parseFloat(turno.monto_inicial) + parseFloat(totales.total_efectivo) - totalEgresos;
 
     return NextResponse.json({
@@ -55,24 +55,21 @@ export async function GET(request: Request) {
   }
 }
 
-// 2. ABRIR Y CERRAR TURNO (ARQUEO)
+// 2. Abrir o Cerrar Turno
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { accion, usuario_id, monto_inicial, turno_id, monto_declarado } = body;
 
-    // A) APERTURA DE TURNO
+    // ABRIR CAJA AL ENTRAR EL EMPLEADO
     if (accion === 'abrir') {
-      if (!usuario_id) {
-        return NextResponse.json({ error: 'Falta usuario_id' }, { status: 400 });
-      }
+      if (!usuario_id) return NextResponse.json({ error: 'Usuario requerido' }, { status: 400 });
 
-      // Verificar si ya tiene un turno abierto previo
+      // Si ya tiene un turno abierto, se le reasigna ese mismo
       const turnoActivo = await query(
-        'SELECT * FROM turnos_caja WHERE usuario_id = $1 AND estado = $2 LIMIT 1',
-        [usuario_id, 'abierto']
+        "SELECT * FROM turnos_caja WHERE usuario_id = $1 AND estado = 'abierto' ORDER BY id DESC LIMIT 1",
+        [usuario_id]
       );
-
       if (turnoActivo.rows.length > 0) {
         return NextResponse.json({ turno: turnoActivo.rows[0] });
       }
@@ -83,26 +80,20 @@ export async function POST(request: Request) {
          RETURNING *`,
         [usuario_id, parseFloat(monto_inicial) || 0]
       );
-
       return NextResponse.json({ turno: res.rows[0] });
     }
 
-    // B) CIERRE DE TURNO Y ARQUEO
+    // CERRAR CAJA Y REALIZAR ARQUEO
     if (accion === 'cerrar') {
-      if (!turno_id) {
-        return NextResponse.json({ error: 'Falta turno_id' }, { status: 400 });
-      }
+      if (!turno_id) return NextResponse.json({ error: 'Turno requerido' }, { status: 400 });
 
-      // 1. Obtener ventas en efectivo
       const calcRes = await query(
-        `SELECT 
-           COALESCE(SUM(CASE WHEN metodo_pago = 'efectivo' THEN total ELSE 0 END), 0) AS ventas_efectivo
+        `SELECT COALESCE(SUM(CASE WHEN metodo_pago = 'efectivo' THEN total ELSE 0 END), 0) AS ventas_efectivo
          FROM ventas 
          WHERE turno_id = $1 AND estado = 'completada'`,
         [turno_id]
       );
 
-      // 2. Obtener gastos/retiros del turno
       const egresosRes = await query(
         `SELECT COALESCE(SUM(monto), 0) AS total_egresos
          FROM movimientos_caja
@@ -110,21 +101,14 @@ export async function POST(request: Request) {
         [turno_id]
       );
 
-      // 3. Obtener monto inicial
       const turnoData = await query('SELECT monto_inicial FROM turnos_caja WHERE id = $1', [turno_id]);
-      if (turnoData.rows.length === 0) {
-        return NextResponse.json({ error: 'Turno no encontrado' }, { status: 404 });
-      }
-
       const montoInicial = parseFloat(turnoData.rows[0]?.monto_inicial || 0);
       const ventasEfectivo = parseFloat(calcRes.rows[0]?.ventas_efectivo || 0);
       const totalEgresos = parseFloat(egresosRes.rows[0]?.total_egresos || 0);
 
-      // Efectivo real que debe haber en gaveta
       const montoEsperado = montoInicial + ventasEfectivo - totalEgresos;
       const declarado = parseFloat(monto_declarado) || 0;
 
-      // 4. Cerrar turno en base de datos
       const res = await query(
         `UPDATE turnos_caja
          SET fecha_cierre = NOW(),

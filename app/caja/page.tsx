@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   ShoppingCart, Trash2, CreditCard, DollarSign, Smartphone,
   Split, Search, UserCheck, LogOut,
-  Package, Barcode, Key, Plus, Minus, CheckCircle, Printer
+  Package, Barcode, Key, Plus, Minus, CheckCircle, Printer, Lock
 } from 'lucide-react';
 
 interface ItemVenta {
@@ -16,37 +16,44 @@ interface ItemVenta {
 }
 
 export default function CajaPOS() {
+  // Autenticación y Turno
+  const [usuario, setUsuario] = useState<{ id: string; nombre: string; rol: string } | null>(null);
+  const [turno, setTurno] = useState<{ id: number; monto_inicial: number } | null>(null);
+  const [pinInput, setPinInput] = useState('');
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [modalApertura, setModalApertura] = useState(false);
+  const [fondoInicial, setFondoInicial] = useState('');
+
+  // Carrito de ventas
   const [items, setItems] = useState<ItemVenta[]>([]);
   const [busqueda, setBusqueda] = useState('');
   const [sugerencias, setSugerencias] = useState<any[]>([]);
   const [montoRecibido, setMontoRecibido] = useState('');
   const [cargando, setCargando] = useState(false);
 
-  // Turno y Usuario Activo (Turno #2, Administrador)
-  const turnoId = 2;
-
-  // Modal Pago Mixto
+  // Pago Mixto
   const [modalMixto, setModalMixto] = useState(false);
   const [pagoEfectivo, setPagoEfectivo] = useState('');
   const [pagoTarjeta, setPagoTarjeta] = useState('');
   const [pagoTransferencia, setPagoTransferencia] = useState('');
 
-  // Modal Ticket / Imprimir
+  // Ticket Térmico
   const [ticketImprimir, setTicketImprimir] = useState<any>(null);
 
-  // Modal Cierre / Arqueo
+  // Cierre y Arqueo
   const [modalCierre, setModalCierre] = useState(false);
+  const [resumenCierre, setResumenCierre] = useState<any>(null);
   const [montoDeclarado, setMontoDeclarado] = useState('');
 
   const inputBusquedaRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!ticketImprimir && !modalMixto && !modalCierre) {
+    if (usuario && turno && !modalMixto && !modalCierre && !ticketImprimir) {
       inputBusquedaRef.current?.focus();
     }
-  }, [items, ticketImprimir, modalMixto, modalCierre]);
+  }, [items, usuario, turno, modalMixto, modalCierre, ticketImprimir]);
 
-  // Autocompletado en tiempo real
+  // Autocompletado en vivo
   useEffect(() => {
     const texto = busqueda.trim();
     if (texto.length >= 2) {
@@ -67,11 +74,71 @@ export default function CajaPOS() {
     }
   }, [busqueda]);
 
+  // LOGIN POR PIN
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pinInput.trim()) return;
+    setLoginError(null);
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: pinInput.trim() }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setLoginError(data.error || 'PIN incorrecto');
+        setPinInput('');
+        return;
+      }
+
+      setUsuario(data.user);
+      if (data.turno) {
+        setTurno(data.turno);
+      } else {
+        setModalApertura(true);
+      }
+      setPinInput('');
+    } catch {
+      setLoginError('Error de conexión al autenticar');
+    }
+  };
+
+  // APERTURA DE TURNO CON FONDO
+  const handleAbrirCaja = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!usuario) return;
+
+    try {
+      const res = await fetch('/api/turnos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accion: 'abrir',
+          usuario_id: usuario.id,
+          monto_inicial: parseFloat(fondoInicial) || 0,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setTurno(data.turno);
+        setModalApertura(false);
+        setFondoInicial('');
+      } else {
+        alert(data.error || 'Error al abrir caja');
+      }
+    } catch {
+      alert('Error al conectar con el servidor');
+    }
+  };
+
   const total = items.reduce((acc, item) => acc + (Number(item.precio) || 0) * item.cantidad, 0);
   const recibidoNum = parseFloat(montoRecibido) || 0;
   const vuelto = recibidoNum > total ? recibidoNum - total : 0;
 
-  // Cálculos para Pago Mixto
+  // Montos de Pago Mixto
   const efNum = parseFloat(pagoEfectivo) || 0;
   const tjNum = parseFloat(pagoTarjeta) || 0;
   const trNum = parseFloat(pagoTransferencia) || 0;
@@ -108,8 +175,8 @@ export default function CajaPOS() {
       } else {
         alert('Producto no encontrado');
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
+      alert('Error al consultar producto');
     }
   };
 
@@ -123,9 +190,9 @@ export default function CajaPOS() {
     }).filter(Boolean) as ItemVenta[]);
   };
 
-  // Procesar cobro único (efectivo, tarjeta, transferencia) ligado al Turno
+  // COBRAR VENTA SIMPLE
   const procesarCobro = async (metodo: string) => {
-    if (items.length === 0 || cargando) return;
+    if (items.length === 0 || cargando || !turno || !usuario) return;
     setCargando(true);
 
     const cobroRecibido = metodo === 'efectivo' && recibidoNum > 0 ? recibidoNum : total;
@@ -141,7 +208,8 @@ export default function CajaPOS() {
           monto_recibido: cobroRecibido,
           total,
           vuelto: vueltoEntrega,
-          turno_id: turnoId,
+          turno_id: turno.id,
+          usuario_id: usuario.id,
           pagos: [{ metodo, monto: total }]
         }),
       });
@@ -154,21 +222,22 @@ export default function CajaPOS() {
           recibido: cobroRecibido,
           vuelto: vueltoEntrega,
           fecha: new Date(),
-          turnoId: turnoId
+          turnoId: turno.id,
+          cajero: usuario.nombre
         });
         setItems([]);
         setMontoRecibido('');
       } else {
-        alert('Error al registrar la venta en la base de datos');
+        alert('Error al registrar la venta');
       }
     } catch {
-      alert('Error de conexión con el servidor');
+      alert('Error de conexión');
     } finally {
       setCargando(false);
     }
   };
 
-  // Procesar cobro mixto con validación estricta de montos
+  // COBRAR PAGO MIXTO VALIDADO
   const procesarCobroMixto = async () => {
     if (sumaMixta !== total) {
       if (sumaMixta > total) {
@@ -179,7 +248,9 @@ export default function CajaPOS() {
       return;
     }
 
+    if (!turno || !usuario) return;
     setCargando(true);
+
     try {
       const pagos = [
         { metodo: 'efectivo', monto: efNum },
@@ -197,7 +268,8 @@ export default function CajaPOS() {
           pagos,
           monto_recibido: total,
           vuelto: 0,
-          turno_id: turnoId
+          turno_id: turno.id,
+          usuario_id: usuario.id
         }),
       });
 
@@ -209,8 +281,8 @@ export default function CajaPOS() {
           recibido: total,
           vuelto: 0,
           fecha: new Date(),
-          turnoId: turnoId,
-          pagosDetalle: pagos
+          turnoId: turno.id,
+          cajero: usuario.nombre
         });
         setItems([]);
         setModalMixto(false);
@@ -218,20 +290,141 @@ export default function CajaPOS() {
         setPagoTarjeta('');
         setPagoTransferencia('');
       } else {
-        alert('Error al registrar la venta mixta');
+        alert('Error al registrar pago mixto');
       }
     } catch {
-      alert('Error de conexión con el servidor');
+      alert('Error de conexión');
     } finally {
       setCargando(false);
     }
   };
 
+  // ABRIR ARQUEO DE CIERRE
+  const abrirCierreTurno = async () => {
+    if (!turno) return;
+    try {
+      const res = await fetch(`/api/turnos?turno_id=${turno.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setResumenCierre(data);
+        setModalCierre(true);
+      }
+    } catch {
+      setModalCierre(true);
+    }
+  };
+
+  // CONFIRMAR CIERRE
+  const handleConfirmarCierre = async () => {
+    if (!turno) return;
+    try {
+      const res = await fetch('/api/turnos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accion: 'cerrar',
+          turno_id: turno.id,
+          monto_declarado: parseFloat(montoDeclarado) || 0,
+        }),
+      });
+
+      if (res.ok) {
+        alert('Turno cerrado y auditado con éxito.');
+        setUsuario(null);
+        setTurno(null);
+        setModalCierre(false);
+        setMontoDeclarado('');
+        setItems([]);
+      }
+    } catch {
+      alert('Error al cerrar turno');
+    }
+  };
+
+  // PANTALLA 1: SI NO ESTÁ LOGUEADO, MUESTRA LOGIN DE PIN DIRECTO
+  if (!usuario || !turno) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        {/* MODAL FONDO INICIAL (SI YA INGRESO PIN PERO NO TIENE TURNO ABIERTO) */}
+        {modalApertura ? (
+          <form onSubmit={handleAbrirCaja} className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl text-center">
+            <h2 className="text-2xl font-black text-slate-800 mb-1">Apertura de Caja</h2>
+            <p className="text-xs text-slate-500 mb-4">
+              Cajero: <strong className="text-slate-800">{usuario?.nombre}</strong>
+            </p>
+            <label className="text-xs font-bold text-slate-600 block mb-1 text-left">Fondo inicial de cambio ($)</label>
+            <input
+              type="number"
+              required
+              value={fondoInicial}
+              onChange={(e) => setFondoInicial(e.target.value)}
+              placeholder="Ej: 10000"
+              autoFocus
+              className="w-full text-3xl font-black p-3.5 rounded-2xl border-2 border-slate-300 text-center mb-5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+            <button
+              type="submit"
+              className="w-full bg-[#10b981] hover:bg-[#059669] text-white font-black py-4 rounded-2xl text-base shadow transition"
+            >
+              Comenzar Turno
+            </button>
+          </form>
+        ) : (
+          /* LOGIN POR PIN RÁPIDO */
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl text-center">
+            <div className="w-14 h-14 bg-black text-white font-black text-base rounded-full flex items-center justify-center mx-auto mb-3 shadow">
+              PASE
+            </div>
+            <h1 className="text-2xl font-black text-slate-800 mb-1">Iniciar Sesión</h1>
+            <p className="text-xs text-slate-400 mb-5">Ingrese su PIN de 4 dígitos</p>
+
+            {loginError && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold p-2.5 rounded-xl mb-4">
+                {loginError}
+              </div>
+            )}
+
+            <form onSubmit={handleLogin} className="space-y-4">
+              <input
+                type="password"
+                maxLength={4}
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value)}
+                placeholder="••••"
+                autoFocus
+                className="w-full text-4xl tracking-widest font-black text-center p-3.5 rounded-2xl border-2 border-slate-300 focus:outline-none focus:border-blue-500 bg-slate-50"
+              />
+
+              {/* Botonera de teclado rápido para pantalla táctil */}
+              <div className="grid grid-cols-3 gap-2 pt-2">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 'C', 0, 'OK'].map((btn) => (
+                  <button
+                    key={btn}
+                    type="button"
+                    onClick={() => {
+                      if (btn === 'C') setPinInput('');
+                      else if (btn === 'OK') handleLogin({ preventDefault: () => {} } as any);
+                      else if (pinInput.length < 4) setPinInput(prev => prev + btn);
+                    }}
+                    className="p-3.5 text-xl font-bold bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-800 rounded-xl transition"
+                  >
+                    {btn}
+                  </button>
+                ))}
+              </div>
+            </form>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // PANTALLA 2: CAJA EN VIVO CON PERMISOS Y TURNOS
   return (
     <div className="flex flex-col lg:flex-row min-h-screen lg:h-screen w-full bg-slate-100 font-sans antialiased overflow-y-auto lg:overflow-hidden p-2 sm:p-3 gap-3">
       {/* SECCIÓN IZQUIERDA */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* ENCABEZADO SUPERIOR */}
+        {/* ENCABEZADO SUPERIOR CON CONTROL POR ROLES */}
         <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 mb-2.5 space-y-2.5">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-black text-xs tracking-tighter">
@@ -240,46 +433,52 @@ export default function CajaPOS() {
             <span className="font-extrabold text-slate-900 text-sm sm:text-base">PASE</span>
             <span className="text-slate-300">|</span>
             <span className="text-xs sm:text-sm text-slate-700 font-semibold flex items-center gap-1">
-              <UserCheck size={15} className="text-blue-600" /> Dueño (Administrador)
+              <UserCheck size={15} className="text-blue-600" /> {usuario.nombre}
             </span>
-            <span className="bg-purple-100 text-purple-700 font-black text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md">
-              ADMIN
+            <span className="bg-purple-100 text-purple-700 font-black text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md uppercase">
+              {usuario.rol}
             </span>
             <span className="bg-slate-100 text-slate-600 font-bold text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md">
-              Turno #{turnoId}
+              Turno #{turno.id}
             </span>
           </div>
 
-          <div>
-            <Link
-              href="/usuarios"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 px-3 py-1.5 rounded-xl transition shadow-sm"
-            >
-              <Key size={14} className="text-slate-500" /> Personal y PINs
-            </Link>
-          </div>
-
+          {/* Botones de Administración (SOLO VISIBLE PARA ADMIN O ENCARGADO) */}
           <div className="flex items-center gap-2 flex-wrap">
-            <Link
-              href="/reportes"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 sm:py-2 rounded-xl transition"
-            >
-              <DollarSign size={14} /> Control de Cajas
-            </Link>
-            <Link
-              href="/productos"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 sm:py-2 rounded-xl transition shadow-sm"
-            >
-              <Package size={14} className="text-slate-500" /> Inventario
-            </Link>
-            <Link
-              href="/etiquetas"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 sm:py-2 rounded-xl transition shadow-sm"
-            >
-              <Barcode size={14} className="text-slate-500" /> Etiquetas
-            </Link>
+            {usuario.rol === 'admin' && (
+              <Link
+                href="/usuarios"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 px-3 py-1.5 rounded-xl transition shadow-sm"
+              >
+                <Key size={14} className="text-slate-500" /> Personal y PINs
+              </Link>
+            )}
+
+            {(usuario.rol === 'admin' || usuario.rol === 'encargado') && (
+              <>
+                <Link
+                  href="/reportes"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 sm:py-2 rounded-xl transition"
+                >
+                  <DollarSign size={14} /> Control de Cajas
+                </Link>
+                <Link
+                  href="/productos"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 sm:py-2 rounded-xl transition shadow-sm"
+                >
+                  <Package size={14} className="text-slate-500" /> Inventario
+                </Link>
+                <Link
+                  href="/etiquetas"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 sm:py-2 rounded-xl transition shadow-sm"
+                >
+                  <Barcode size={14} className="text-slate-500" /> Etiquetas
+                </Link>
+              </>
+            )}
+
             <button
-              onClick={() => setModalCierre(true)}
+              onClick={abrirCierreTurno}
               className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 sm:py-2 rounded-xl transition"
             >
               <LogOut size={14} /> Cerrar Turno / Arqueo
@@ -322,7 +521,7 @@ export default function CajaPOS() {
           )}
         </div>
 
-        {/* LISTADO DE ITEMS */}
+        {/* LISTADO DE PRODUCTOS */}
         <div className="flex-1 bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 overflow-y-auto min-h-[220px]">
           {items.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2 sm:gap-3 py-10 lg:py-0">
@@ -356,7 +555,7 @@ export default function CajaPOS() {
         </div>
       </div>
 
-      {/* SECCIÓN DERECHA: TOTAL Y BOTONERA */}
+      {/* SECCIÓN DERECHA: TOTAL Y ACCIONES */}
       <div className="w-full lg:w-[330px] xl:w-[360px] flex-shrink-0 bg-white rounded-2xl border border-slate-200 p-4 flex flex-col justify-between shadow-sm">
         <div>
           <div className="bg-[#0f172a] text-white p-4 sm:p-5 rounded-2xl mb-3 text-center">
@@ -438,7 +637,7 @@ export default function CajaPOS() {
         </div>
       </div>
 
-      {/* MODAL PAGO MIXTO CON CONTROL EXACTO */}
+      {/* MODAL PAGO MIXTO CON VALIDACIÓN EXACTA */}
       {modalMixto && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl">
@@ -483,7 +682,7 @@ export default function CajaPOS() {
                 />
               </div>
 
-              {/* BARRA DE CONTROL DE MONTO */}
+              {/* SEMÁFORO DE MONTO EXACTO */}
               <div className="p-3 rounded-xl border text-xs font-bold space-y-1 bg-slate-50">
                 <div className="flex justify-between">
                   <span>Asignado:</span>
@@ -522,7 +721,7 @@ export default function CajaPOS() {
         </div>
       )}
 
-      {/* MODAL DE VENTA COMPLETADA / IMPRESIÓN DE TICKET */}
+      {/* MODAL TICKET / COMPROBANTE POSVENTA */}
       {ticketImprimir && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl p-6 shadow-2xl w-full max-w-xs text-center animate-fade-in">
@@ -564,7 +763,7 @@ export default function CajaPOS() {
 
           <div className="mb-2 text-[10px]">
             <p>Fecha: {new Date(ticketImprimir.fecha).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</p>
-            <p>Ticket Turno #{ticketImprimir.turnoId}</p>
+            <p>Ticket Turno #{ticketImprimir.turnoId} | Cajero: {ticketImprimir.cajero}</p>
             <p>--------------------------------</p>
           </div>
 
@@ -611,29 +810,49 @@ export default function CajaPOS() {
         </div>
       )}
 
-      {/* MODAL CIERRE DE TURNO */}
+      {/* MODAL CIERRE DE TURNO Y ARQUEO */}
       {modalCierre && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl">
-            <h2 className="text-lg font-black text-slate-800 mb-1">Cierre de Caja y Arqueo</h2>
-            <p className="text-xs text-slate-500 mb-3">Dinero real contado en la gaveta</p>
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
+            <h2 className="text-xl font-black text-slate-800 mb-1">Cierre de Caja</h2>
+            <p className="text-xs text-slate-500 mb-4">Turno #{turno.id} — {usuario.nombre}</p>
+
+            {resumenCierre && (
+              <div className="bg-slate-50 p-3 rounded-2xl border text-xs space-y-1.5 mb-4 font-semibold text-slate-600">
+                <div className="flex justify-between">
+                  <span>Fondo Inicial:</span>
+                  <span className="font-bold text-slate-800">${parseFloat(resumenCierre.turno.monto_inicial).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-emerald-700">
+                  <span>Ventas Efectivo:</span>
+                  <span className="font-bold">${parseFloat(resumenCierre.totales.total_efectivo).toLocaleString()}</span>
+                </div>
+                <div className="border-t pt-1 flex justify-between font-black text-slate-900 text-sm">
+                  <span>Efectivo Esperado:</span>
+                  <span className="text-emerald-600">${resumenCierre.efectivoEsperado.toLocaleString()}</span>
+                </div>
+              </div>
+            )}
+
+            <label className="text-xs font-bold text-slate-700 block mb-1">Dinero contado en mano ($)</label>
             <input
               type="number"
               value={montoDeclarado}
               onChange={(e) => setMontoDeclarado(e.target.value)}
               placeholder="$ 0"
-              className="w-full text-2xl font-black p-2.5 rounded-lg border border-slate-300 text-center mb-3"
+              className="w-full text-2xl font-black p-3 rounded-xl border border-slate-300 text-center mb-4 focus:ring-2 focus:ring-rose-500 focus:outline-none"
             />
+
             <div className="flex gap-2">
               <button
                 onClick={() => setModalCierre(false)}
-                className="w-1/3 bg-slate-100 text-slate-700 font-bold py-2 rounded-lg text-sm"
+                className="w-1/3 bg-slate-100 text-slate-700 font-bold py-2.5 rounded-xl text-sm"
               >
                 Volver
               </button>
               <button
-                onClick={() => { alert('Caja cerrada con éxito'); window.location.reload(); }}
-                className="w-2/3 bg-rose-600 text-white font-bold py-2 rounded-lg text-sm"
+                onClick={handleConfirmarCierre}
+                className="w-2/3 bg-rose-600 hover:bg-rose-700 text-white font-black py-2.5 rounded-xl text-sm shadow transition"
               >
                 Confirmar Cierre
               </button>
