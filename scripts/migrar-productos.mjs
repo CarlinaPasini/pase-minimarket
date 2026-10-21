@@ -3,13 +3,13 @@ import pg from 'pg';
 
 const { Pool } = pg;
 
-// Configuración directa y explícita para Supabase (evita fallos de parseo de contraseña)
+// Conexión directa al pooler de Supabase con tu contraseña y región correcta
 const pgPool = new Pool({
   user: 'postgres.vzopwjvuanjwgbbfsfor',
-  host: 'aws-0-sa-east-1.pooler.supabase.com',
+  host: 'aws-1-us-west-2.pooler.supabase.com',
   database: 'postgres',
-  password: String('Ismaluana.1'),
-  port: 65432,
+  password: 'Ismaluana.1',
+  port: 6543,
   ssl: { rejectUnauthorized: false },
 });
 
