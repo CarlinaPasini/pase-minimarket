@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   ShoppingCart, Trash2, CreditCard, DollarSign, Smartphone,
   Split, Search, UserCheck, LogOut,
-  Package, Barcode, Key, Plus, Minus
+  Package, Barcode, Key, Plus, Minus, CheckCircle, Printer
 } from 'lucide-react';
 
 interface ItemVenta {
@@ -22,22 +22,31 @@ export default function CajaPOS() {
   const [montoRecibido, setMontoRecibido] = useState('');
   const [cargando, setCargando] = useState(false);
 
-  // Modales
+  // Turno y Usuario Activo (Turno #2, Administrador)
+  const turnoId = 2;
+
+  // Modal Pago Mixto
   const [modalMixto, setModalMixto] = useState(false);
   const [pagoEfectivo, setPagoEfectivo] = useState('');
   const [pagoTarjeta, setPagoTarjeta] = useState('');
   const [pagoTransferencia, setPagoTransferencia] = useState('');
 
+  // Modal Ticket / Imprimir
+  const [ticketImprimir, setTicketImprimir] = useState<any>(null);
+
+  // Modal Cierre / Arqueo
   const [modalCierre, setModalCierre] = useState(false);
   const [montoDeclarado, setMontoDeclarado] = useState('');
 
   const inputBusquedaRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    inputBusquedaRef.current?.focus();
-  }, [items]);
+    if (!ticketImprimir && !modalMixto && !modalCierre) {
+      inputBusquedaRef.current?.focus();
+    }
+  }, [items, ticketImprimir, modalMixto, modalCierre]);
 
-  // Autocompletado en vivo mientras escribes
+  // Autocompletado en tiempo real
   useEffect(() => {
     const texto = busqueda.trim();
     if (texto.length >= 2) {
@@ -61,6 +70,13 @@ export default function CajaPOS() {
   const total = items.reduce((acc, item) => acc + (Number(item.precio) || 0) * item.cantidad, 0);
   const recibidoNum = parseFloat(montoRecibido) || 0;
   const vuelto = recibidoNum > total ? recibidoNum - total : 0;
+
+  // Cálculos para Pago Mixto
+  const efNum = parseFloat(pagoEfectivo) || 0;
+  const tjNum = parseFloat(pagoTarjeta) || 0;
+  const trNum = parseFloat(pagoTransferencia) || 0;
+  const sumaMixta = efNum + tjNum + trNum;
+  const diferenciaMixta = total - sumaMixta;
 
   const agregarProducto = (prod: any) => {
     const precio = parseFloat(String(prod.precio_venta || prod.precio || 0));
@@ -107,9 +123,13 @@ export default function CajaPOS() {
     }).filter(Boolean) as ItemVenta[]);
   };
 
+  // Procesar cobro único (efectivo, tarjeta, transferencia) ligado al Turno
   const procesarCobro = async (metodo: string) => {
     if (items.length === 0 || cargando) return;
     setCargando(true);
+
+    const cobroRecibido = metodo === 'efectivo' && recibidoNum > 0 ? recibidoNum : total;
+    const vueltoEntrega = metodo === 'efectivo' ? vuelto : 0;
 
     try {
       const res = await fetch('/api/ventas', {
@@ -118,42 +138,53 @@ export default function CajaPOS() {
         body: JSON.stringify({
           items,
           metodo_pago: metodo,
-          monto_recibido: metodo === 'efectivo' ? (recibidoNum || total) : total,
+          monto_recibido: cobroRecibido,
           total,
-          vuelto: metodo === 'efectivo' ? vuelto : 0
+          vuelto: vueltoEntrega,
+          turno_id: turnoId,
+          pagos: [{ metodo, monto: total }]
         }),
       });
 
       if (res.ok) {
+        setTicketImprimir({
+          items: [...items],
+          total,
+          metodo_pago: metodo.toUpperCase(),
+          recibido: cobroRecibido,
+          vuelto: vueltoEntrega,
+          fecha: new Date(),
+          turnoId: turnoId
+        });
         setItems([]);
         setMontoRecibido('');
       } else {
-        alert('Error al registrar la venta');
+        alert('Error al registrar la venta en la base de datos');
       }
     } catch {
-      alert('Error de conexión');
+      alert('Error de conexión con el servidor');
     } finally {
       setCargando(false);
     }
   };
 
+  // Procesar cobro mixto con validación estricta de montos
   const procesarCobroMixto = async () => {
-    const ef = parseFloat(pagoEfectivo) || 0;
-    const tj = parseFloat(pagoTarjeta) || 0;
-    const tr = parseFloat(pagoTransferencia) || 0;
-    const suma = ef + tj + tr;
-
-    if (Math.round(suma) < Math.round(total)) {
-      alert(`El monto ingresado ($${suma}) no cubre el total ($${total})`);
+    if (sumaMixta !== total) {
+      if (sumaMixta > total) {
+        alert(`Te pasaste del monto: Ingresaste $${sumaMixta.toLocaleString()} y el total es de $${total.toLocaleString()}. Ajusta los valores para que dé exacto.`);
+      } else {
+        alert(`Falta cubrir dinero: Ingresaste $${sumaMixta.toLocaleString()} y faltan $${diferenciaMixta.toLocaleString()}.`);
+      }
       return;
     }
 
     setCargando(true);
     try {
       const pagos = [
-        { metodo: 'efectivo', monto: ef },
-        { metodo: 'tarjeta', monto: tj },
-        { metodo: 'transferencia', monto: tr }
+        { metodo: 'efectivo', monto: efNum },
+        { metodo: 'tarjeta', monto: tjNum },
+        { metodo: 'transferencia', monto: trNum }
       ].filter(p => p.monto > 0);
 
       const res = await fetch('/api/ventas', {
@@ -164,36 +195,44 @@ export default function CajaPOS() {
           metodo_pago: 'mixto',
           total,
           pagos,
-          monto_recibido: suma,
-          vuelto: suma > total ? suma - total : 0
+          monto_recibido: total,
+          vuelto: 0,
+          turno_id: turnoId
         }),
       });
 
       if (res.ok) {
+        setTicketImprimir({
+          items: [...items],
+          total,
+          metodo_pago: 'PAGO MIXTO',
+          recibido: total,
+          vuelto: 0,
+          fecha: new Date(),
+          turnoId: turnoId,
+          pagosDetalle: pagos
+        });
         setItems([]);
         setModalMixto(false);
         setPagoEfectivo('');
         setPagoTarjeta('');
         setPagoTransferencia('');
       } else {
-        alert('Error al registrar el cobro mixto');
+        alert('Error al registrar la venta mixta');
       }
     } catch {
-      alert('Error de conexión');
+      alert('Error de conexión con el servidor');
     } finally {
       setCargando(false);
     }
   };
 
-  const totalParcialMixto = (parseFloat(pagoEfectivo) || 0) + (parseFloat(pagoTarjeta) || 0) + (parseFloat(pagoTransferencia) || 0);
-
   return (
     <div className="flex flex-col lg:flex-row min-h-screen lg:h-screen w-full bg-slate-100 font-sans antialiased overflow-y-auto lg:overflow-hidden p-2 sm:p-3 gap-3">
       {/* SECCIÓN IZQUIERDA */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* ENCABEZADO SUPERIOR CON ENLACES REALES */}
+        {/* ENCABEZADO SUPERIOR */}
         <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 mb-2.5 space-y-2.5">
-          {/* Fila 1: Logo y usuario */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-black text-xs tracking-tighter">
               PASE
@@ -207,27 +246,23 @@ export default function CajaPOS() {
               ADMIN
             </span>
             <span className="bg-slate-100 text-slate-600 font-bold text-[10px] sm:text-[11px] px-2 py-0.5 rounded-md">
-              Turno #2
+              Turno #{turnoId}
             </span>
           </div>
 
-          {/* Fila 2: Enlace a administración de Personal y PINs */}
           <div>
             <Link
               href="/usuarios"
               className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 px-3 py-1.5 rounded-xl transition shadow-sm"
-              title="Administrar cajeros, contraseñas y PINs"
             >
               <Key size={14} className="text-slate-500" /> Personal y PINs
             </Link>
           </div>
 
-          {/* Fila 3: Botones principales */}
           <div className="flex items-center gap-2 flex-wrap">
             <Link
               href="/reportes"
               className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 sm:py-2 rounded-xl transition"
-              title="Control de Cajas, Arqueos y Auditoría"
             >
               <DollarSign size={14} /> Control de Cajas
             </Link>
@@ -266,7 +301,6 @@ export default function CajaPOS() {
             />
           </form>
 
-          {/* SUGERENCIAS AL TIPIAR */}
           {sugerencias.length > 0 && (
             <div className="absolute left-0 right-0 top-14 bg-white border border-slate-200 rounded-2xl shadow-2xl z-40 max-h-56 overflow-y-auto">
               {sugerencias.map((s) => (
@@ -382,7 +416,12 @@ export default function CajaPOS() {
           </div>
 
           <button
-            onClick={() => setModalMixto(true)}
+            onClick={() => {
+              setModalMixto(true);
+              setPagoEfectivo('');
+              setPagoTarjeta('');
+              setPagoTransferencia('');
+            }}
             disabled={cargando || items.length === 0}
             className="w-full bg-[#c084fc] hover:bg-[#a855f7] disabled:opacity-50 text-white font-bold text-sm sm:text-base py-3 rounded-xl flex items-center justify-center gap-2 transition"
           >
@@ -399,7 +438,7 @@ export default function CajaPOS() {
         </div>
       </div>
 
-      {/* MODAL PAGO MIXTO */}
+      {/* MODAL PAGO MIXTO CON CONTROL EXACTO */}
       {modalMixto && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl">
@@ -444,11 +483,23 @@ export default function CajaPOS() {
                 />
               </div>
 
-              <div className="bg-slate-50 p-2.5 rounded-lg border flex justify-between text-xs font-bold">
-                <span>Total ingresado:</span>
-                <span className={totalParcialMixto >= total ? 'text-emerald-600' : 'text-rose-500'}>
-                  ${totalParcialMixto.toLocaleString()} de${total.toLocaleString()}
-                </span>
+              {/* BARRA DE CONTROL DE MONTO */}
+              <div className="p-3 rounded-xl border text-xs font-bold space-y-1 bg-slate-50">
+                <div className="flex justify-between">
+                  <span>Asignado:</span>
+                  <span className={sumaMixta === total ? 'text-emerald-600 font-black' : 'text-slate-800'}>
+                    ${sumaMixta.toLocaleString()} de${total.toLocaleString()}
+                  </span>
+                </div>
+                {sumaMixta < total && (
+                  <p className="text-amber-600 font-bold">Faltan: ${diferenciaMixta.toLocaleString()}</p>
+                )}
+                {sumaMixta > total && (
+                  <p className="text-rose-600 font-black">Te pasaste por: ${(sumaMixta - total).toLocaleString()}</p>
+                )}
+                {sumaMixta === total && (
+                  <p className="text-emerald-600 font-black">✓ Monto exacto cubierto</p>
+                )}
               </div>
             </div>
 
@@ -461,12 +512,101 @@ export default function CajaPOS() {
               </button>
               <button
                 onClick={procesarCobroMixto}
-                disabled={cargando || totalParcialMixto < total}
-                className="w-2/3 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white font-bold py-2 rounded-lg text-sm"
+                disabled={cargando || sumaMixta !== total}
+                className="w-2/3 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white font-bold py-2 rounded-lg text-sm transition"
               >
                 Confirmar Cobro
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE VENTA COMPLETADA / IMPRESIÓN DE TICKET */}
+      {ticketImprimir && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-6 shadow-2xl w-full max-w-xs text-center animate-fade-in">
+            <div className="flex justify-center mb-2">
+              <CheckCircle className="text-emerald-500" size={48} />
+            </div>
+            <h3 className="text-xl font-black text-slate-800">¡Venta Registrada!</h3>
+            <p className="text-sm font-bold text-slate-500 mb-4">Total: ${ticketImprimir.total.toLocaleString()}</p>
+
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  window.print();
+                  setTicketImprimir(null);
+                }}
+                className="w-full bg-slate-900 hover:bg-black text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 text-sm shadow transition"
+              >
+                <Printer size={18} /> Imprimir Ticket
+              </button>
+              <button
+                onClick={() => setTicketImprimir(null)}
+                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs transition"
+              >
+                Continuar sin Imprimir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PLANTILLA DE IMPRESIÓN PARA TICKET TÉRMICO */}
+      {ticketImprimir && (
+        <div id="ticket-impresion" className="hidden print:block font-mono text-[11px] leading-tight text-black p-2 w-[58mm] max-w-[80mm] mx-auto">
+          <div className="text-center mb-2">
+            <p className="font-bold text-sm tracking-tighter">PASE MINIMARKET</p>
+            <p className="text-[9px]">Av. San Martín 2321, Mendoza</p>
+            <p className="text-[9px]">--------------------------------</p>
+          </div>
+
+          <div className="mb-2 text-[10px]">
+            <p>Fecha: {new Date(ticketImprimir.fecha).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</p>
+            <p>Ticket Turno #{ticketImprimir.turnoId}</p>
+            <p>--------------------------------</p>
+          </div>
+
+          <table className="w-full text-left mb-2 text-[10px]">
+            <thead>
+              <tr className="border-b border-black">
+                <th>Cant</th>
+                <th>Detalle</th>
+                <th className="text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ticketImprimir.items.map((it: any, i: number) => (
+                <tr key={i}>
+                  <td className="align-top">{it.cantidad}x</td>
+                  <td>{it.nombre}</td>
+                  <td className="text-right align-top">${(it.precio * it.cantidad).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="border-t border-black pt-1 mb-2 text-[11px]">
+            <div className="flex justify-between font-bold text-sm">
+              <span>TOTAL:</span>
+              <span>${ticketImprimir.total.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between text-[10px]">
+              <span>Medio:</span>
+              <span>{ticketImprimir.metodo_pago}</span>
+            </div>
+            {ticketImprimir.vuelto > 0 && (
+              <div className="flex justify-between text-[10px] font-bold">
+                <span>Vuelto:</span>
+                <span>${ticketImprimir.vuelto.toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="text-center text-[9px] mt-3">
+            <p>¡Gracias por su compra!</p>
+            <p>PASE Minimarket</p>
           </div>
         </div>
       )}
