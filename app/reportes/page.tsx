@@ -63,19 +63,29 @@ export default function PantallaReportes() {
   const [cajeroFiltro, setCajeroFiltro] = useState('todos');
   const [pestaña, setPestaña] = useState<'turnos' | 'ventas' | 'analisis'>('turnos');
   const [periodo, setPeriodo] = useState<'hoy' | '7d' | '30d' | 'mes'>('7d');
-  const [mesSeleccionado, setMesSeleccionado] = useState(new Date().toISOString().slice(0, 7));
+  // Se inicializa en cadena vacía para evitar el bloqueo de prerender en Next.js
+  const [mesSeleccionado, setMesSeleccionado] = useState('');
   const [cargando, setCargando] = useState(false);
 
-  // Estados para ver el detalle de un turno seleccionado
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<TurnoAuditoria | null>(null);
   const [itemsTurno, setItemsTurno] = useState<ItemDetalleTurno[]>([]);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
+
+  // Inicializar el mes actual en el cliente de forma segura
+  useEffect(() => {
+    const hoy = new Date();
+    const yyyy = hoy.getFullYear();
+    const mm = String(hoy.getMonth() + 1).padStart(2, '0');
+    setMesSeleccionado(`${yyyy}-${mm}`);
+  }, []);
 
   const cargarDatos = async () => {
     setCargando(true);
     try {
       let url = `/api/reportes?periodo=${periodo}`;
-      if (periodo === 'mes') url += `&mes=${mesSeleccionado}`;
+      if (periodo === 'mes' && mesSeleccionado) {
+        url += `&mes=${mesSeleccionado}`;
+      }
 
       const res = await fetch(url);
       if (res.ok) {
@@ -113,19 +123,12 @@ export default function PantallaReportes() {
   };
 
   const cajerosDisponibles = Array.from(new Set(turnos.map((t) => t.cajero)));
-
-  const turnosFiltrados = cajeroFiltro === 'todos'
-    ? turnos
-    : turnos.filter((t) => t.cajero === cajeroFiltro);
-
-  const ventasFiltradas = cajeroFiltro === 'todos'
-    ? ventas
-    : ventas.filter((v) => v.cajero === cajeroFiltro);
-
+  const turnosFiltrados = cajeroFiltro === 'todos' ? turnos : turnos.filter((t) => t.cajero === cajeroFiltro);
+  const ventasFiltradas = cajeroFiltro === 'todos' ? ventas : ventas.filter((v) => v.cajero === cajeroFiltro);
   const totalFacturado = turnosFiltrados.reduce((acc, t) => acc + parseFloat(String(t.total_ventas || 0)), 0);
   const cajasAbiertas = turnos.filter((t) => t.estado === 'abierto').length;
 
-  // Curva SVG interactiva
+  // Curva SVG
   const maxMontoCurva = Math.max(...curva.map((c) => parseFloat(String(c.total_dia))), 100);
   const puntosCurva = curva.map((item, idx) => {
     const x = curva.length > 1 ? (idx / (curva.length - 1)) * 520 + 40 : 300;
@@ -137,7 +140,7 @@ export default function PantallaReportes() {
     ? puntosCurva.reduce((acc, p, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`, '')
     : '';
 
-  // Gráfico Donut / Torta SVG
+  // Gráfico de Torta SVG
   const totalUnidadesTop = topProductos.reduce((acc, p) => acc + parseFloat(String(p.total_unidades)), 0);
   let acumuladorPorcentaje = 0;
 
@@ -156,8 +159,8 @@ export default function PantallaReportes() {
               <ArrowLeft size={20} />
             </Link>
             
-            <div className="w-10 h-10 rounded-full overflow-hidden bg-black flex-shrink-0 border border-slate-200 shadow-sm flex items-center justify-center">
-              <img src="/logo.jpeg" alt="PASE" className="w-full h-full object-cover" />
+            <div className="w-10 h-10 rounded-full overflow-hidden bg-black flex-shrink-0 border border-slate-200 shadow-sm flex items-center justify-center font-black text-white text-xs">
+              PASE
             </div>
 
             <div>
@@ -211,7 +214,7 @@ export default function PantallaReportes() {
           </div>
         </div>
 
-        {/* Tarjetas de Métricas Rápidas */}
+        {/* Tarjetas de Métricas */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
             <span className="text-xs uppercase font-bold text-slate-400">Total Facturado</span>
@@ -234,7 +237,7 @@ export default function PantallaReportes() {
           </div>
         </div>
 
-        {/* Pestañas: Turnos, Tickets y la nueva de Análisis */}
+        {/* Pestañas */}
         <div className="flex gap-2 border-b border-slate-200 pb-2">
           <button
             onClick={() => setPestaña('turnos')}
@@ -271,9 +274,9 @@ export default function PantallaReportes() {
                   <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase text-xs bg-slate-50">
                     <th className="py-3 px-4">Turno</th>
                     <th className="py-3 px-4">Cajero</th>
-                    <th className="py-3 px-4">Apertura (Día / Hora)</th>
-                    <th className="py-3 px-4">Cierre (Día / Hora)</th>
-                    <th className="py-3 px-4 text-right">Fondo Inicial</th>
+                    <th className="py-3 px-4">Apertura</th>
+                    <th className="py-3 px-4">Cierre</th>
+                    <th className="py-3 px-4 text-right">Fondo</th>
                     <th className="py-3 px-4 text-right">Ventas</th>
                     <th className="py-3 px-4 text-right">Esperado</th>
                     <th className="py-3 px-4 text-right">Contado</th>
@@ -421,7 +424,6 @@ export default function PantallaReportes() {
         {/* PESTAÑA 3: ANÁLISIS EN CURVAS Y TORTAS */}
         {pestaña === 'analisis' && (
           <div className="space-y-6">
-            {/* Barra de Filtro de Tiempo */}
             <div className="bg-white p-4 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-3 shadow-sm">
               <div className="flex items-center gap-2">
                 <Filter size={18} className="text-indigo-600" />
@@ -482,7 +484,7 @@ export default function PantallaReportes() {
 
                       {puntosCurva.map((p, idx) => (
                         <g key={idx} className="group">
-                          <circle cx={p.x} cy={p.y} r="5" fill="#10b981" stroke="#ffffff" strokeWidth="2.5" className="cursor-pointer hover:r-7 transition-all" />
+                          <circle cx={p.x} cy={p.y} r="5" fill="#10b981" stroke="#ffffff" strokeWidth="2.5" />
                           <text x={p.x} y={p.y - 10} textAnchor="middle" className="text-[10px] font-mono font-bold fill-slate-700">
                             ${Math.round(parseFloat(String(p.total_dia)) / 1000)}k
                           </text>
@@ -535,7 +537,6 @@ export default function PantallaReportes() {
                               strokeWidth="6"
                               strokeDasharray={strokeDasharray}
                               strokeDashoffset={strokeDashoffset}
-                              className="transition-all duration-500"
                             />
                           );
                         })}
