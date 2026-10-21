@@ -30,7 +30,6 @@ export default function CajaPOS() {
 
   const [modalCierre, setModalCierre] = useState(false);
   const [montoDeclarado, setMontoDeclarado] = useState('');
-  const [modalPersonal, setModalPersonal] = useState(false);
 
   const inputBusquedaRef = useRef<HTMLInputElement>(null);
 
@@ -38,7 +37,7 @@ export default function CajaPOS() {
     inputBusquedaRef.current?.focus();
   }, [items]);
 
-  // Autocompletado mientras escribes (mínimo 2 letras)
+  // Autocompletado en vivo mientras escribes
   useEffect(() => {
     const texto = busqueda.trim();
     if (texto.length >= 2) {
@@ -190,11 +189,11 @@ export default function CajaPOS() {
 
   return (
     <div className="flex flex-col lg:flex-row min-h-screen lg:h-screen w-full bg-slate-100 font-sans antialiased overflow-y-auto lg:overflow-hidden p-2 sm:p-3 gap-3">
-      {/* SECCIÓN IZQUIERDA: CABECERA, BUSCADOR Y LISTA DE COMPRA */}
+      {/* SECCIÓN IZQUIERDA */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* ENCABEZADO SUPERIOR */}
+        {/* ENCABEZADO SUPERIOR CON ENLACES REALES */}
         <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 mb-2.5 space-y-2.5">
-          {/* Fila 1: Datos del local y usuario */}
+          {/* Fila 1: Logo y usuario */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-black text-xs tracking-tighter">
               PASE
@@ -212,46 +211,48 @@ export default function CajaPOS() {
             </span>
           </div>
 
-          {/* Fila 2: Botón Personal y PINs */}
+          {/* Fila 2: Enlace a administración de Personal y PINs */}
           <div>
-            <button
-              onClick={() => setModalPersonal(true)}
-              className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 px-3 py-1.5 rounded-xl transition shadow-sm"
+            <Link
+              href="/usuarios"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 px-3 py-1.5 rounded-xl transition shadow-sm"
+              title="Administrar cajeros, contraseñas y PINs"
             >
               <Key size={14} className="text-slate-500" /> Personal y PINs
-            </button>
+            </Link>
           </div>
 
-          {/* Fila 3: Botones de acciones */}
+          {/* Fila 3: Botones principales */}
           <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => alert('Control y Arqueo de Cajas')}
-              className="flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 sm:py-2 rounded-xl transition"
+            <Link
+              href="/reportes"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 sm:py-2 rounded-xl transition"
+              title="Control de Cajas, Arqueos y Auditoría"
             >
-              $ Control de Cajas
-            </button>
+              <DollarSign size={14} /> Control de Cajas
+            </Link>
             <Link
               href="/productos"
-              className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 sm:py-2 rounded-xl transition shadow-sm"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 sm:py-2 rounded-xl transition shadow-sm"
             >
               <Package size={14} className="text-slate-500" /> Inventario
             </Link>
             <Link
               href="/etiquetas"
-              className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 sm:py-2 rounded-xl transition shadow-sm"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 px-3 py-1.5 sm:py-2 rounded-xl transition shadow-sm"
             >
               <Barcode size={14} className="text-slate-500" /> Etiquetas
             </Link>
             <button
               onClick={() => setModalCierre(true)}
-              className="flex items-center gap-1.5 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 sm:py-2 rounded-xl transition"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 sm:py-2 rounded-xl transition"
             >
               <LogOut size={14} /> Cerrar Turno / Arqueo
             </button>
           </div>
         </div>
 
-        {/* INPUT DE BÚSQUEDA */}
+        {/* BUSCADOR */}
         <div className="relative mb-2.5">
           <form onSubmit={handleBuscar}>
             <Search className="absolute left-3.5 top-3 text-blue-500" size={20} />
@@ -265,7 +266,7 @@ export default function CajaPOS() {
             />
           </form>
 
-          {/* DESPLEGABLE EN VIVO */}
+          {/* SUGERENCIAS AL TIPIAR */}
           {sugerencias.length > 0 && (
             <div className="absolute left-0 right-0 top-14 bg-white border border-slate-200 rounded-2xl shadow-2xl z-40 max-h-56 overflow-y-auto">
               {sugerencias.map((s) => (
@@ -287,7 +288,7 @@ export default function CajaPOS() {
           )}
         </div>
 
-        {/* CONTENEDOR DE PRODUCTOS */}
+        {/* LISTADO DE ITEMS */}
         <div className="flex-1 bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 overflow-y-auto min-h-[220px]">
           {items.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2 sm:gap-3 py-10 lg:py-0">
@@ -321,10 +322,9 @@ export default function CajaPOS() {
         </div>
       </div>
 
-      {/* SECCIÓN DERECHA: TOTAL Y BOTONERA (RESPONSIVE EN MÓVILES) */}
+      {/* SECCIÓN DERECHA: TOTAL Y BOTONERA */}
       <div className="w-full lg:w-[330px] xl:w-[360px] flex-shrink-0 bg-white rounded-2xl border border-slate-200 p-4 flex flex-col justify-between shadow-sm">
         <div>
-          {/* TOTAL A COBRAR */}
           <div className="bg-[#0f172a] text-white p-4 sm:p-5 rounded-2xl mb-3 text-center">
             <span className="text-[11px] tracking-wider uppercase font-extrabold text-slate-400 block mb-1">
               TOTAL A COBRAR
@@ -355,7 +355,6 @@ export default function CajaPOS() {
           )}
         </div>
 
-        {/* ACCIONES DE COBRO */}
         <div className="space-y-2">
           <button
             onClick={() => procesarCobro('efectivo')}
@@ -468,35 +467,6 @@ export default function CajaPOS() {
                 Confirmar Cobro
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL PERSONAL Y PINS */}
-      {modalPersonal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-sm rounded-2xl p-5 shadow-2xl">
-            <h2 className="text-lg font-black text-slate-800 mb-2">Personal y PINs</h2>
-            <div className="space-y-2 text-sm text-slate-600 mb-4">
-              <div className="p-2 bg-slate-50 rounded-lg flex justify-between">
-                <span>Dueño (Admin):</span>
-                <span className="font-mono font-bold">1111</span>
-              </div>
-              <div className="p-2 bg-slate-50 rounded-lg flex justify-between">
-                <span>Encargado:</span>
-                <span className="font-mono font-bold">2222</span>
-              </div>
-              <div className="p-2 bg-slate-50 rounded-lg flex justify-between">
-                <span>Cajera:</span>
-                <span className="font-mono font-bold">3333</span>
-              </div>
-            </div>
-            <button
-              onClick={() => setModalPersonal(false)}
-              className="w-full bg-slate-800 text-white font-bold py-2 rounded-xl text-sm"
-            >
-              Cerrar
-            </button>
           </div>
         </div>
       )}
