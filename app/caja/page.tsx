@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   ShoppingCart, Trash2, CreditCard, DollarSign, Smartphone,
   AlertCircle, CheckCircle, Split, Search, UserCheck, LogOut, Lock,
-  Package, Barcode, Key, Plus, Minus
+  Package, Barcode, Key, MinusCircle, Printer, Plus, Minus
 } from 'lucide-react';
 
 interface Producto {
@@ -27,12 +27,22 @@ export default function CajaPOS() {
   const [busqueda, setBusqueda] = useState('');
   const [montoRecibido, setMontoRecibido] = useState('');
   const [cargando, setCargando] = useState(false);
+
+  // Modales
   const [modalMixto, setModalMixto] = useState(false);
   const [pagoEfectivo, setPagoEfectivo] = useState('');
   const [pagoTarjeta, setPagoTarjeta] = useState('');
   const [pagoTransferencia, setPagoTransferencia] = useState('');
-  const [mensajeExito, setMensajeExito] = useState<string | null>(null);
 
+  const [modalGasto, setModalGasto] = useState(false);
+  const [montoGasto, setMontoGasto] = useState('');
+  const [motivoGasto, setMotivoGasto] = useState('');
+
+  const [modalCierre, setModalCierre] = useState(false);
+  const [montoDeclarado, setMontoDeclarado] = useState('');
+  const [resumenCierre, setResumenCierre] = useState<any>(null);
+
+  const [mensajeExito, setMensajeExito] = useState<string | null>(null);
   const inputBusquedaRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -43,7 +53,7 @@ export default function CajaPOS() {
   const recibidoNum = parseFloat(montoRecibido) || 0;
   const vuelto = recibidoNum > total ? recibidoNum - total : 0;
 
-  // Manejo de búsqueda y agregado de productos
+  // Búsqueda y agregado de producto
   const handleBuscar = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!busqueda.trim()) return;
@@ -100,13 +110,13 @@ export default function CajaPOS() {
         setItems([]);
         setMontoRecibido('');
         setMensajeExito(`¡Cobro de $${total.toLocaleString()} registrado con éxito!`);
-        setTimeout(() => setMensajeExito(null), 3500);
+        setTimeout(() => setMensajeExito(null), 3000);
       } else {
-        alert('Error al registrar la venta en la base de datos');
+        alert('Error al registrar la venta');
       }
     } catch (err) {
       console.error(err);
-      alert('Error de conexión');
+      alert('Error de red al cobrar');
     } finally {
       setCargando(false);
     }
@@ -152,15 +162,83 @@ export default function CajaPOS() {
         setPagoTarjeta('');
         setPagoTransferencia('');
         setMensajeExito(`¡Pago mixto de $${total.toLocaleString()} completado!`);
-        setTimeout(() => setMensajeExito(null), 3500);
+        setTimeout(() => setMensajeExito(null), 3000);
       } else {
-        alert('Error al registrar la venta mixta');
+        alert('Error al registrar pago mixto');
       }
     } catch (err) {
       console.error(err);
-      alert('Error de red al registrar el pago mixto');
+      alert('Error de conexión');
     } finally {
       setCargando(false);
+    }
+  };
+
+  // Registrar retiro / gasto
+  const handleRegistrarGasto = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!montoGasto || !motivoGasto.trim()) return;
+
+    try {
+      const res = await fetch('/api/movimientos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: 'gasto',
+          monto: parseFloat(montoGasto),
+          motivo: motivoGasto.trim(),
+        }),
+      });
+
+      if (res.ok) {
+        alert('Retiro de caja registrado.');
+        setModalGasto(false);
+        setMontoGasto('');
+        setMotivoGasto('');
+      } else {
+        alert('Error al registrar el retiro');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Cierre de caja
+  const handleAbrirCierre = async () => {
+    try {
+      const res = await fetch('/api/turnos?accion=resumen');
+      if (res.ok) {
+        const data = await res.json();
+        setResumenCierre(data);
+        setModalCierre(true);
+      } else {
+        setModalCierre(true);
+      }
+    } catch {
+      setModalCierre(true);
+    }
+  };
+
+  const handleConfirmarCierre = async () => {
+    if (!montoDeclarado) {
+      alert('Ingrese el monto contado en caja');
+      return;
+    }
+    try {
+      const res = await fetch('/api/turnos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accion: 'cerrar',
+          monto_declarado: parseFloat(montoDeclarado)
+        }),
+      });
+      if (res.ok) {
+        alert('Turno cerrado exitosamente.');
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -168,9 +246,9 @@ export default function CajaPOS() {
 
   return (
     <div className="flex h-screen bg-slate-100 font-sans antialiased overflow-hidden">
-      {/* COLUMNA IZQUIERDA: PRODUCTOS Y BUSCADOR */}
+      {/* COLUMNA IZQUIERDA */}
       <div className="flex-1 flex flex-col p-4 border-r border-slate-200">
-        {/* ENCABEZADO SUPERIOR */}
+        {/* ENCABEZADO SUPERIOR CON TODOS LOS BOTONES */}
         <div className="flex justify-between items-center bg-white p-3 rounded-2xl shadow-sm border border-slate-200 mb-3">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-black text-white flex items-center justify-center font-black text-xs">PASE</div>
@@ -182,16 +260,28 @@ export default function CajaPOS() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button onClick={() => window.location.href = '/productos'} className="flex items-center gap-1.5 text-xs font-bold bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg transition">
+            <button onClick={() => setModalGasto(true)} className="flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-lg transition">
+              <MinusCircle size={14}/> Gasto
+            </button>
+            <button onClick={handleAbrirCierre} className="flex items-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 rounded-lg transition">
+              $ Cajas
+            </button>
+            <button onClick={() => window.location.href = '/productos'} className="flex items-center gap-1 text-xs font-bold bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg transition">
               <Package size={14}/> Stock
             </button>
-            <button onClick={() => window.location.href = '/caja'} className="flex items-center gap-1 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-lg transition">
-              <LogOut size={14}/> Salir
+            <button onClick={() => alert('Generador de etiquetas')} className="flex items-center gap-1 text-xs font-bold bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg transition">
+              <Barcode size={14}/> Etiquetas
+            </button>
+            <button onClick={() => alert('Gestión de personal y PINs')} className="flex items-center gap-1 text-xs font-bold bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg transition">
+              <Key size={14}/> Personal
+            </button>
+            <button onClick={handleAbrirCierre} className="flex items-center gap-1 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-lg transition">
+              <LogOut size={14}/> Cerrar
             </button>
           </div>
         </div>
 
-        {/* MENSAJE FLOTANTE DE ÉXITO */}
+        {/* MENSAJE DE ÉXITO */}
         {mensajeExito && (
           <div className="bg-emerald-600 text-white font-bold text-sm px-4 py-3 rounded-xl mb-3 flex items-center gap-2 shadow-lg animate-fade-in">
             <CheckCircle size={18} /> {mensajeExito}
@@ -234,10 +324,9 @@ export default function CajaPOS() {
         </div>
       </div>
 
-      {/* COLUMNA DERECHA: TOTAL Y BOTONES DE COBRO */}
+      {/* COLUMNA DERECHA: TOTALES Y COBRO */}
       <div className="w-[380px] bg-white p-5 flex flex-col justify-between border-l border-slate-200">
         <div>
-          {/* TOTAL A COBRAR */}
           <div className="bg-[#0f172a] text-white p-6 rounded-2xl mb-4 text-center">
             <span className="text-xs tracking-wider uppercase font-extrabold text-slate-400 block mb-1">TOTAL A COBRAR</span>
             <span className="text-5xl font-black text-[#10b981]">${total.toLocaleString()}</span>
@@ -351,7 +440,7 @@ export default function CajaPOS() {
               </div>
 
               <div className="bg-slate-50 p-3 rounded-xl border flex justify-between text-sm font-bold">
-                <span>Total asignado:</span>
+                <span>Total ingresado:</span>
                 <span className={totalParcialMixto >= total ? 'text-emerald-600' : 'text-rose-500'}>
                   ${totalParcialMixto.toLocaleString()} de${total.toLocaleString()}
                 </span>
@@ -359,19 +448,75 @@ export default function CajaPOS() {
             </div>
 
             <div className="flex gap-2">
-              <button
-                onClick={() => setModalMixto(false)}
-                className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition"
-              >
+              <button onClick={() => setModalMixto(false)} className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition">
                 Volver
               </button>
-              <button
-                onClick={procesarCobroMixto}
-                disabled={cargando || totalParcialMixto < total}
-                className="w-2/3 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-black py-3 rounded-xl transition"
-              >
+              <button onClick={procesarCobroMixto} disabled={cargando || totalParcialMixto < total} className="w-2/3 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-black py-3 rounded-xl transition">
                 Confirmar Cobro
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL RETIRO / GASTO */}
+      {modalGasto && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
+            <h2 className="text-xl font-black text-slate-800 mb-2">Registrar Salida de Dinero</h2>
+            <form onSubmit={handleRegistrarGasto} className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-slate-600 block mb-1">Monto a retirar ($)</label>
+                <input
+                  type="number"
+                  required
+                  value={montoGasto}
+                  onChange={(e) => setMontoGasto(e.target.value)}
+                  placeholder="$ 0"
+                  className="w-full text-xl font-black p-3 rounded-xl border border-slate-300 text-center focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-600 block mb-1">Motivo / Proveedor</label>
+                <input
+                  type="text"
+                  required
+                  value={motivoGasto}
+                  onChange={(e) => setMotivoGasto(e.target.value)}
+                  placeholder="Ej: Pago de panadería, hielo..."
+                  className="w-full text-sm font-medium p-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setModalGasto(false)} className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl">Cancelar</button>
+                <button type="submit" className="w-2/3 bg-amber-600 hover:bg-amber-700 text-white font-black py-3 rounded-xl">Guardar Retiro</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CIERRE DE CAJA */}
+      {modalCierre && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl">
+            <h2 className="text-2xl font-black text-slate-800 mb-1">Cierre de Turno</h2>
+            <p className="text-xs text-slate-500 mb-4">Ingrese el efectivo real contado en la gaveta</p>
+
+            <div className="mb-4">
+              <label className="text-xs font-bold text-slate-700 block mb-1">Dinero en Mano ($)</label>
+              <input
+                type="number"
+                value={montoDeclarado}
+                onChange={(e) => setMontoDeclarado(e.target.value)}
+                placeholder="$ 0"
+                className="w-full text-3xl font-black p-3 rounded-xl border border-slate-300 text-center focus:outline-none focus:ring-2 focus:ring-rose-500"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <button onClick={() => setModalCierre(false)} className="w-1/3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl">Volver</button>
+              <button onClick={handleConfirmarCierre} className="w-2/3 bg-rose-600 hover:bg-rose-700 text-white font-black py-3 rounded-xl">Confirmar Cierre</button>
             </div>
           </div>
         </div>
