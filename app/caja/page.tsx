@@ -16,7 +16,6 @@ interface ItemVenta {
 }
 
 export default function CajaPOS() {
-  // Autenticación y Turno
   const [usuario, setUsuario] = useState<{ id: string; nombre: string; rol: string } | null>(null);
   const [turno, setTurno] = useState<{ id: number; monto_inicial: number } | null>(null);
   const [pinInput, setPinInput] = useState('');
@@ -24,23 +23,19 @@ export default function CajaPOS() {
   const [modalApertura, setModalApertura] = useState(false);
   const [fondoInicial, setFondoInicial] = useState('');
 
-  // Carrito de ventas
   const [items, setItems] = useState<ItemVenta[]>([]);
   const [busqueda, setBusqueda] = useState('');
   const [sugerencias, setSugerencias] = useState<any[]>([]);
   const [montoRecibido, setMontoRecibido] = useState('');
   const [cargando, setCargando] = useState(false);
 
-  // Pago Mixto
   const [modalMixto, setModalMixto] = useState(false);
   const [pagoEfectivo, setPagoEfectivo] = useState('');
   const [pagoTarjeta, setPagoTarjeta] = useState('');
   const [pagoTransferencia, setPagoTransferencia] = useState('');
 
-  // Ticket Térmico
   const [ticketImprimir, setTicketImprimir] = useState<any>(null);
 
-  // Cierre y Arqueo Discriminado
   const [modalCierre, setModalCierre] = useState(false);
   const [resumenCierre, setResumenCierre] = useState<any>(null);
   const [montoDeclarado, setMontoDeclarado] = useState('');
@@ -53,7 +48,6 @@ export default function CajaPOS() {
     }
   }, [items, usuario, turno, modalMixto, modalCierre, ticketImprimir]);
 
-  // Autocompletado en vivo
   useEffect(() => {
     const texto = busqueda.trim();
     if (texto.length >= 2) {
@@ -87,7 +81,7 @@ export default function CajaPOS() {
       } else if (e.ctrlKey && (e.key === 'q' || e.key === 'Q')) {
         e.preventDefault();
         if (items.length > 0 && !cargando && !modalMixto) {
-          procesarCobro('transferencia'); // QR
+          procesarCobro('transferencia');
         }
       } else if (e.ctrlKey && (e.key === 'w' || e.key === 'W')) {
         e.preventDefault();
@@ -97,12 +91,12 @@ export default function CajaPOS() {
       } else if (e.ctrlKey && (e.key === 'e' || e.key === 'E')) {
         e.preventDefault();
         if (items.length > 0 && !cargando && !modalMixto) {
-          procesarCobro('tarjeta'); // Débito
+          procesarCobro('tarjeta');
         }
       } else if (e.ctrlKey && (e.key === 'r' || e.key === 'R')) {
         e.preventDefault();
         if (items.length > 0 && !cargando && !modalMixto) {
-          procesarCobro('tarjeta'); // Crédito
+          procesarCobro('tarjeta');
         }
       } else if (e.ctrlKey && (e.key === 'm' || e.key === 'M')) {
         e.preventDefault();
@@ -119,7 +113,6 @@ export default function CajaPOS() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [items, cargando, turno, usuario, modalMixto, modalCierre, ticketImprimir, montoRecibido]);
 
-  // LOGIN POR PIN
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!pinInput.trim()) return;
@@ -151,7 +144,6 @@ export default function CajaPOS() {
     }
   };
 
-  // APERTURA DE TURNO CON FONDO
   const handleAbrirCaja = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!usuario) return;
@@ -183,7 +175,6 @@ export default function CajaPOS() {
   const recibidoNum = parseFloat(montoRecibido) || 0;
   const vuelto = recibidoNum > total ? recibidoNum - total : 0;
 
-  // Montos de Pago Mixto
   const efNum = parseFloat(pagoEfectivo) || 0;
   const tjNum = parseFloat(pagoTarjeta) || 0;
   const trNum = parseFloat(pagoTransferencia) || 0;
@@ -235,7 +226,6 @@ export default function CajaPOS() {
     }).filter(Boolean) as ItemVenta[]);
   };
 
-  // COBRAR VENTA SIMPLE
   const procesarCobro = async (metodo: string) => {
     if (items.length === 0 || cargando || !turno || !usuario) return;
     setCargando(true);
@@ -282,11 +272,10 @@ export default function CajaPOS() {
     }
   };
 
-  // COBRAR PAGO MIXTO VALIDADO EXACTO
   const procesarCobroMixto = async () => {
     if (sumaMixta !== total) {
       if (sumaMixta > total) {
-        alert(`Te pasaste del monto: Ingresaste $${sumaMixta.toLocaleString()} y el total es de $${total.toLocaleString()}. Ajusta los valores para que dé exacto.`);
+        alert(`Te pasaste del monto: Ingresaste $${sumaMixta.toLocaleString()} y el total es de $${total.toLocaleString()}.`);
       } else {
         alert(`Falta cubrir dinero: Ingresaste $${sumaMixta.toLocaleString()} y faltan $${diferenciaMixta.toLocaleString()}.`);
       }
@@ -344,7 +333,6 @@ export default function CajaPOS() {
     }
   };
 
-  // ABRIR ARQUEO DE CIERRE
   const abrirCierreTurno = async () => {
     if (!turno) return;
     try {
@@ -359,7 +347,6 @@ export default function CajaPOS() {
     }
   };
 
-  // CONFIRMAR CIERRE
   const handleConfirmarCierre = async () => {
     if (!turno) return;
     try {
@@ -412,9 +399,7 @@ export default function CajaPOS() {
 
             <form onSubmit={handleAbrirCaja} className="space-y-3">
               <label className="text-xs font-bold text-slate-600 block text-left">
-                {usuario?.rol === 'admin' 
-                  ? 'O inicia un turno para cobrar en mostrador:' 
-                  : 'Fondo inicial de cambio ($):'}
+                {usuario?.rol === 'admin' ? 'O inicia un turno para cobrar en mostrador:' : 'Fondo inicial de cambio ($):'}
               </label>
               <input
                 type="number"
@@ -496,7 +481,6 @@ export default function CajaPOS() {
     <div className="flex flex-col lg:flex-row min-h-screen lg:h-screen w-full bg-slate-100 font-sans antialiased overflow-y-auto lg:overflow-hidden p-2 sm:p-3 gap-3">
       {/* SECCIÓN IZQUIERDA */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* BARRA SUPERIOR CON CONTROLES */}
         <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 mb-2.5 space-y-2.5">
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-black text-xs tracking-tighter">
@@ -804,4 +788,83 @@ export default function CajaPOS() {
               <CheckCircle className="text-emerald-500" size={48} />
             </div>
             <h3 className="text-xl font-black text-slate-800">¡Venta Registrada!</h3>
-            <p className="text-sm font-bold text-slate-50
+            <p className="text-sm font-bold text-slate-500 mb-4">Total: ${ticketImprimir.total.toLocaleString()}</p>
+
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  window.print();
+                  setTicketImprimir(null);
+                }}
+                className="w-full bg-slate-900 hover:bg-black text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 text-sm shadow transition"
+              >
+                <Printer size={18} /> Imprimir Ticket
+              </button>
+              <button
+                onClick={() => setTicketImprimir(null)}
+                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl text-xs transition"
+              >
+                Continuar sin Imprimir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CIERRE DE TURNO */}
+      {modalCierre && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
+            <h2 className="text-xl font-black text-slate-800 mb-1">Cierre de Caja y Arqueo</h2>
+            <p className="text-xs text-slate-500 mb-3">Turno #{turno.id} — {usuario.nombre}</p>
+
+            <label className="text-xs font-bold text-slate-700 block mb-1">
+              Dinero total contado en gaveta ($):
+            </label>
+            <input
+              type="number"
+              value={montoDeclarado}
+              onChange={(e) => setMontoDeclarado(e.target.value)}
+              placeholder="$ 0"
+              autoFocus
+              className="w-full text-2xl font-black p-3 rounded-xl border border-slate-300 text-center mb-3 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+            />
+
+            {resumenCierre && (
+              <div className="bg-slate-50 p-3 rounded-2xl border text-xs space-y-2 mb-4 font-semibold text-slate-600">
+                <div className="flex justify-between text-slate-700">
+                  <span>Fondo de cambio:</span>
+                  <span className="font-bold text-slate-900">
+                    ${parseFloat(resumenCierre.turno.monto_inicial).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between text-blue-700 font-bold border-t pt-1.5">
+                  <span>Recaudación a rendir:</span>
+                  <span className="font-black text-sm">
+                    ${Math.max(0, (parseFloat(montoDeclarado) || 0) - parseFloat(resumenCierre.turno.monto_inicial)).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setModalCierre(false)}
+                className="w-1/3 bg-slate-100 text-slate-700 font-bold py-2.5 rounded-xl text-sm"
+              >
+                Volver
+              </button>
+              <button
+                onClick={handleConfirmarCierre}
+                disabled={!montoDeclarado}
+                className="w-2/3 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white font-black py-2.5 rounded-xl text-sm shadow transition"
+              >
+                Confirmar Cierre
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+} 
