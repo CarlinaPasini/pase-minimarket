@@ -9,19 +9,17 @@ export async function GET(request: Request) {
   const esAutocompletar = searchParams.get('autocomplete') === 'true';
 
   try {
-    // Si no hay término de búsqueda, devolvemos el catálogo completo ordenado
     if (!busqueda) {
       const res = await query(
         `SELECT id, codigo_barras, nombre, precio_costo, precio_venta, stock 
          FROM productos 
          WHERE activo = TRUE 
          ORDER BY nombre ASC 
-         LIMIT 5000`
+         LIMIT 3000`
       );
       return NextResponse.json(res.rows);
     }
 
-    // A) Búsqueda para autocompletado en Caja (dropdown rápido)
     if (esAutocompletar) {
       const res = await query(
         `SELECT id, codigo_barras, nombre, precio_venta, stock 
@@ -39,8 +37,7 @@ export async function GET(request: Request) {
       return NextResponse.json(res.rows);
     }
 
-    // B) Búsqueda por escaneo de lector o código exacto (soporta códigos con coma)
-    let resExacto = await query(
+    let res = await query(
       `SELECT id, codigo_barras, nombre, precio_costo, precio_venta, stock 
        FROM productos 
        WHERE activo = TRUE 
@@ -53,33 +50,29 @@ export async function GET(request: Request) {
       [busqueda, `%${busqueda}%`]
     );
 
-    if (resExacto.rows.length > 0) {
-      return NextResponse.json(resExacto.rows);
+    if (res.rows.length === 0) {
+      res = await query(
+        `SELECT id, codigo_barras, nombre, precio_costo, precio_venta, stock 
+         FROM productos 
+         WHERE activo = TRUE AND nombre ILIKE $1 
+         ORDER BY nombre ASC 
+         LIMIT 1`,
+        [`%${busqueda}%`]
+      );
     }
 
-    // C) Búsqueda amplia por coincidencia de texto en el nombre o código
-    const resLista = await query(
-      `SELECT id, codigo_barras, nombre, precio_costo, precio_venta, stock 
-       FROM productos 
-       WHERE activo = TRUE 
-         AND (
-           nombre ILIKE $1 
-           OR codigo_barras ILIKE $1 
-           OR $2 = ANY(string_to_array(replace(codigo_barras, ' ', ''), ','))
-         )
-       ORDER BY nombre ASC 
-       LIMIT 100`,
-      [`%${busqueda}%`, busqueda]
-    );
+    if (res.rows.length === 0) {
+      return NextResponse.json({ error: `Producto "${busqueda}" no encontrado` }, { status: 404 });
+    }
 
-    return NextResponse.json(resLista.rows);
+    return NextResponse.json(res.rows[0]);
   } catch (error: any) {
     console.error('Error al consultar productos:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
-// 2. REGISTRAR PRODUCTO NUEVO
+// 2. CREAR PRODUCTO NUEVO (Con validación antiduplicados en español)
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -99,15 +92,32 @@ export async function POST(request: Request) {
       codigo_barras = codigo_barras.trim();
     }
 
+    // Extraer cada código individual para verificar que ninguno esté en otro producto
+    const codigosArray = codigo_barras
+      .split(',')
+      .map((c: string) => c.trim())
+      .filter((c: string) => c.length > 0);
+
+    for (const cod of codigosArray) {
+      const duplicado = await query(
+        `SELECT id, nombre FROM productos 
+         WHERE activo = TRUE 
+           AND $1 = ANY(string_to_array(replace(codigo_barras, ' ', ''), ','))
+         LIMIT 1`,
+        [cod]
+      );
+
+      if (duplicado.rows.length > 0) {
+        return NextResponse.json(
+          { error: `El código "${cod}" ya pertenece al producto "${duplicado.rows[0].nombre}". No se permiten códigos repetidos.` },
+          { status: 400 }
+        );
+      }
+    }
+
     const res = await query(
       `INSERT INTO productos (codigo_barras, nombre, precio_costo, precio_venta, stock, activo)
        VALUES ($1, $2, $3, $4, $5, TRUE)
-       ON CONFLICT (codigo_barras) DO UPDATE 
-       SET nombre = EXCLUDED.nombre,
-           precio_costo = EXCLUDED.precio_costo,
-           precio_venta = EXCLUDED.precio_venta,
-           stock = EXCLUDED.stock,
-           activo = TRUE
        RETURNING *`,
       [codigo_barras, nombre.trim(), parseFloat(precio_costo) || 0, parseFloat(precio_venta), parseFloat(stock) || 0]
     );
@@ -119,7 +129,7 @@ export async function POST(request: Request) {
   }
 }
 
-// 3. ACTUALIZAR PRODUCTO (Precios, Costos o Stock)
+// 3. ACTUALIZAR PRODUCTO (Verifica que ningún código nuevo le pertenezca a OTRO producto)
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
@@ -127,6 +137,31 @@ export async function PUT(request: Request) {
 
     if (!id || !nombre || !precio_venta) {
       return NextResponse.json({ error: 'Faltan campos obligatorios' }, { status: 400 });
+    }
+
+    if (codigo_barras && codigo_barras.trim() !== '') {
+      const codigosArray = codigo_barras
+        .split(',')
+        .map((c: string) => c.trim())
+        .filter((c: string) => c.length > 0);
+
+      for (const cod of codigosArray) {
+        const duplicado = await query(
+          `SELECT id, nombre FROM productos 
+           WHERE activo = TRUE 
+             AND id != $1
+             AND $2 = ANY(string_to_array(replace(codigo_barras, ' ', ''), ','))
+           LIMIT 1`,
+          [id, cod]
+        );
+
+        if (duplicado.rows.length > 0) {
+          return NextResponse.json(
+            { error: `El código "${cod}" ya está en uso por "${duplicado.rows[0].nombre}".` },
+            { status: 400 }
+          );
+        }
+      }
     }
 
     const res = await query(
