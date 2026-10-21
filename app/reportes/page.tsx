@@ -63,7 +63,7 @@ export default function PantallaReportes() {
   const [cajeroFiltro, setCajeroFiltro] = useState('todos');
   const [pestaña, setPestaña] = useState<'turnos' | 'ventas' | 'analisis'>('turnos');
   const [periodo, setPeriodo] = useState<'hoy' | '7d' | '30d' | 'mes'>('7d');
-  // Se inicializa en cadena vacía para evitar el bloqueo de prerender en Next.js
+  // Se inicializa en cadena vacía para evitar el error de prerender en Vercel
   const [mesSeleccionado, setMesSeleccionado] = useState('');
   const [cargando, setCargando] = useState(false);
 
@@ -71,7 +71,7 @@ export default function PantallaReportes() {
   const [itemsTurno, setItemsTurno] = useState<ItemDetalleTurno[]>([]);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
 
-  // Inicializar el mes actual en el cliente de forma segura
+  // Inicialización segura de la fecha en el cliente
   useEffect(() => {
     const hoy = new Date();
     const yyyy = hoy.getFullYear();
@@ -140,7 +140,7 @@ export default function PantallaReportes() {
     ? puntosCurva.reduce((acc, p, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`, '')
     : '';
 
-  // Gráfico de Torta SVG
+  // Gráfico Donut / Torta SVG
   const totalUnidadesTop = topProductos.reduce((acc, p) => acc + parseFloat(String(p.total_unidades)), 0);
   let acumuladorPorcentaje = 0;
 
@@ -148,7 +148,7 @@ export default function PantallaReportes() {
     <div className="min-h-screen bg-slate-100 font-sans p-6">
       <div className="max-w-7xl mx-auto space-y-6">
 
-        {/* Encabezado Superior */}
+        {/* Encabezado Superior con Logo PASE */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-2xl shadow-sm gap-4 border border-slate-200">
           <div className="flex items-center gap-3">
             <Link 
@@ -237,7 +237,7 @@ export default function PantallaReportes() {
           </div>
         </div>
 
-        {/* Pestañas */}
+        {/* Selector de Pestañas */}
         <div className="flex gap-2 border-b border-slate-200 pb-2">
           <button
             onClick={() => setPestaña('turnos')}
