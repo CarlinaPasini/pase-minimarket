@@ -3,17 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   ShoppingCart, Trash2, CreditCard, DollarSign, Smartphone,
-  AlertCircle, CheckCircle, Split, Search, UserCheck, LogOut,
+  CheckCircle, Split, Search, UserCheck, LogOut,
   Package, Barcode, Key, MinusCircle, Plus, Minus
 } from 'lucide-react';
-
-interface Producto {
-  id: string;
-  codigo_barras: string;
-  nombre: string;
-  precio_venta: number;
-  stock: number;
-}
 
 interface ItemVenta {
   id: string;
@@ -25,16 +17,16 @@ interface ItemVenta {
 export default function CajaPOS() {
   const [items, setItems] = useState<ItemVenta[]>([]);
   const [busqueda, setBusqueda] = useState('');
+  const [sugerencias, setSugerencias] = useState<any[]>([]);
   const [montoRecibido, setMontoRecibido] = useState('');
   const [cargando, setCargando] = useState(false);
 
-  // Modal Pago Mixto
+  // Modales
   const [modalMixto, setModalMixto] = useState(false);
   const [pagoEfectivo, setPagoEfectivo] = useState('');
   const [pagoTarjeta, setPagoTarjeta] = useState('');
   const [pagoTransferencia, setPagoTransferencia] = useState('');
 
-  // Modales Gasto y Cierre
   const [modalGasto, setModalGasto] = useState(false);
   const [montoGasto, setMontoGasto] = useState('');
   const [motivoGasto, setMotivoGasto] = useState('');
@@ -48,11 +40,44 @@ export default function CajaPOS() {
     inputBusquedaRef.current?.focus();
   }, [items]);
 
+  // Autocompletado en vivo mientras escribes
+  useEffect(() => {
+    const texto = busqueda.trim();
+    if (texto.length >= 2) {
+      const delay = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/productos?codigo=${encodeURIComponent(texto)}&autocomplete=true`);
+          if (res.ok) {
+            const data = await res.json();
+            setSugerencias(Array.isArray(data) ? data : []);
+          }
+        } catch {
+          setSugerencias([]);
+        }
+      }, 150);
+      return () => clearTimeout(delay);
+    } else {
+      setSugerencias([]);
+    }
+  }, [busqueda]);
+
   const total = items.reduce((acc, item) => acc + (Number(item.precio) || 0) * item.cantidad, 0);
   const recibidoNum = parseFloat(montoRecibido) || 0;
   const vuelto = recibidoNum > total ? recibidoNum - total : 0;
 
-  // Búsqueda idéntica a como te funcionaba
+  const agregarProducto = (prod: any) => {
+    const precio = parseFloat(String(prod.precio_venta || prod.precio || 0));
+    setItems(prev => {
+      const existe = prev.find(p => p.id === prod.id);
+      if (existe) {
+        return prev.map(p => p.id === prod.id ? { ...p, cantidad: p.cantidad + 1 } : p);
+      }
+      return [...prev, { id: prod.id, nombre: prod.nombre, precio, cantidad: 1 }];
+    });
+    setBusqueda('');
+    setSugerencias([]);
+  };
+
   const handleBuscar = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!busqueda.trim()) return;
@@ -61,18 +86,9 @@ export default function CajaPOS() {
       const res = await fetch(`/api/productos?codigo=${encodeURIComponent(busqueda.trim())}`);
       if (res.ok) {
         const prod = await res.json();
-        // Soporta tanto si devuelve objeto único como si devuelve array
-        const p = Array.isArray(prod) ? prod[0] : prod;
-        if (p && p.id) {
-          const precio = parseFloat(String(p.precio_venta || p.precio || 0));
-          setItems(prev => {
-            const existe = prev.find(item => item.id === p.id);
-            if (existe) {
-              return prev.map(item => item.id === p.id ? { ...item, cantidad: item.cantidad + 1 } : item);
-            }
-            return [...prev, { id: p.id, nombre: p.nombre, precio, cantidad: 1 }];
-          });
-          setBusqueda('');
+        const item = Array.isArray(prod) ? prod[0] : prod;
+        if (item && item.id) {
+          agregarProducto(item);
         } else {
           alert('Producto no encontrado');
         }
@@ -175,146 +191,167 @@ export default function CajaPOS() {
   const totalParcialMixto = (parseFloat(pagoEfectivo) || 0) + (parseFloat(pagoTarjeta) || 0) + (parseFloat(pagoTransferencia) || 0);
 
   return (
-    <div className="flex h-screen bg-slate-100 font-sans antialiased overflow-hidden">
-      {/* COLUMNA IZQUIERDA: PANTALLA PRINCIPAL */}
-      <div className="flex-1 flex flex-col p-4 border-r border-slate-200">
-        {/* BARRA SUPERIOR ORIGINAL */}
-        <div className="flex justify-between items-center bg-white p-3 rounded-2xl shadow-sm border border-slate-200 mb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-black text-white flex items-center justify-center font-black text-xs">PASE</div>
+    <div className="flex w-screen h-screen bg-slate-100 font-sans antialiased overflow-hidden">
+      {/* SECCIÓN PRINCIPAL IZQUIERDA */}
+      <div className="flex-1 flex flex-col p-3 overflow-hidden border-r border-slate-200">
+        {/* ENCABEZADO SUPERIOR */}
+        <div className="flex flex-wrap justify-between items-center bg-white p-2.5 rounded-2xl shadow-sm border border-slate-200 mb-2.5 gap-2">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-black text-xs">PASE</div>
             <span className="font-bold text-slate-800 text-sm">PASE</span>
-            <span className="text-slate-400">|</span>
-            <span className="text-xs text-slate-600 flex items-center gap-1"><UserCheck size={14}/> Dueño (Administra...</span>
-            <span className="bg-purple-100 text-purple-700 font-black text-[10px] px-2 py-0.5 rounded-md">ADMIN</span>
-            <span className="bg-slate-100 text-slate-600 font-bold text-[10px] px-1.5 py-0.5 rounded-md">#1</span>
+            <span className="text-slate-300">|</span>
+            <span className="text-xs text-slate-600 flex items-center gap-1"><UserCheck size={13}/> Dueño (Admin...)</span>
+            <span className="bg-purple-100 text-purple-700 font-black text-[10px] px-1.5 py-0.5 rounded">ADMIN</span>
+            <span className="bg-slate-100 text-slate-600 font-bold text-[10px] px-1 py-0.5 rounded">#1</span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button onClick={() => setModalGasto(true)} className="flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-1.5 rounded-lg transition">
-              <MinusCircle size={14}/> Gasto
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button onClick={() => setModalGasto(true)} className="flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1.5 rounded-lg transition">
+              <MinusCircle size={13}/> Gasto
             </button>
-            <button onClick={() => setModalCierre(true)} className="flex items-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 rounded-lg transition">
+            <button onClick={() => setModalCierre(true)} className="flex items-center gap-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1.5 rounded-lg transition">
               $ Cajas
             </button>
-            <button onClick={() => window.location.href = '/productos'} className="flex items-center gap-1 text-xs font-bold bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg transition">
-              <Package size={14}/> Stock
+            <button onClick={() => window.location.href = '/productos'} className="flex items-center gap-1 text-xs font-bold bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 px-2.5 py-1.5 rounded-lg transition">
+              <Package size={13}/> Stock
             </button>
-            <button onClick={() => alert('Generador de etiquetas')} className="flex items-center gap-1 text-xs font-bold bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg transition">
-              <Barcode size={14}/> Etiquetas
+            <button onClick={() => alert('Generador de etiquetas')} className="flex items-center gap-1 text-xs font-bold bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 px-2.5 py-1.5 rounded-lg transition">
+              <Barcode size={13}/> Etiquetas
             </button>
-            <button onClick={() => alert('Gestión de personal y PINs')} className="flex items-center gap-1 text-xs font-bold bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg transition">
-              <Key size={14}/> Personal
+            <button onClick={() => alert('Gestión de personal y PINs')} className="flex items-center gap-1 text-xs font-bold bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 px-2.5 py-1.5 rounded-lg transition">
+              <Key size={13}/> Personal
             </button>
-            <button onClick={() => setModalCierre(true)} className="flex items-center gap-1 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-lg transition">
-              <LogOut size={14}/> Cerrar
+            <button onClick={() => setModalCierre(true)} className="flex items-center gap-1 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-lg transition">
+              <LogOut size={13}/> Cerrar
             </button>
           </div>
         </div>
 
-        {/* INPUT DE BÚSQUEDA ORIGINAL */}
-        <form onSubmit={handleBuscar} className="mb-3">
-          <div className="relative">
-            <Search className="absolute left-4 top-3.5 text-blue-500" size={22} />
+        {/* INPUT DE BÚSQUEDA CON SUGERENCIAS FLOTANTES */}
+        <div className="relative mb-2.5">
+          <form onSubmit={handleBuscar}>
+            <Search className="absolute left-3.5 top-3 text-blue-500" size={20} />
             <input
               ref={inputBusquedaRef}
               type="text"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               placeholder="Pase lector o empiece a escribir el nombre..."
-              className="w-full bg-white text-base font-medium pl-12 pr-4 py-3 rounded-2xl border-2 border-blue-500 focus:outline-none shadow-sm"
+              className="w-full bg-white text-base font-medium pl-11 pr-4 py-2.5 rounded-2xl border-2 border-blue-500 focus:outline-none shadow-sm"
             />
-          </div>
-        </form>
+          </form>
 
-        {/* LISTA DE ITEMS */}
+          {/* MENÚ DE SUGERENCIAS EN TIEMPO REAL */}
+          {sugerencias.length > 0 && (
+            <div className="absolute left-0 right-0 top-12 bg-white border border-slate-200 rounded-2xl shadow-2xl z-40 max-h-64 overflow-y-auto">
+              {sugerencias.map((s) => (
+                <div
+                  key={s.id}
+                  onClick={() => agregarProducto(s)}
+                  className="p-3 hover:bg-blue-50 cursor-pointer flex justify-between items-center border-b border-slate-100 last:border-0"
+                >
+                  <div>
+                    <p className="font-bold text-sm text-slate-800">{s.nombre}</p>
+                    <span className="text-xs text-slate-400 font-mono">{s.codigo_barras}</span>
+                  </div>
+                  <span className="font-black text-blue-600 text-base">
+                    ${parseFloat(String(s.precio_venta)).toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* LISTADO DE ITEMS EN VENTA */}
         <div className="flex-1 overflow-y-auto space-y-2 pr-1">
           {items.map(item => (
-            <div key={item.id} className="bg-white border-2 border-blue-100 p-4 rounded-2xl flex justify-between items-center shadow-sm">
-              <div className="max-w-[70%]">
-                <h3 className="font-extrabold text-slate-800 text-lg leading-tight">{item.nombre}</h3>
-                <span className="text-sm font-semibold text-slate-500">${item.precio.toLocaleString()} x {item.cantidad} unidad(es)</span>
+            <div key={item.id} className="bg-white border-2 border-blue-100 p-3.5 rounded-2xl flex justify-between items-center shadow-sm">
+              <div className="max-w-[65%]">
+                <h3 className="font-extrabold text-slate-800 text-base leading-tight">{item.nombre}</h3>
+                <span className="text-xs font-semibold text-slate-500">${item.precio.toLocaleString()} x {item.cantidad} unidad(es)</span>
               </div>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 bg-slate-100 rounded-xl p-1">
-                  <button onClick={() => modificarCantidad(item.id, -1)} className="p-1.5 bg-white rounded-lg hover:bg-slate-200"><Minus size={14}/></button>
-                  <span className="font-black text-sm px-1">{item.cantidad}</span>
-                  <button onClick={() => modificarCantidad(item.id, 1)} className="p-1.5 bg-white rounded-lg hover:bg-slate-200"><Plus size={14}/></button>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 bg-slate-100 rounded-xl p-1">
+                  <button onClick={() => modificarCantidad(item.id, -1)} className="p-1 bg-white rounded-lg hover:bg-slate-200 shadow-sm"><Minus size={13}/></button>
+                  <span className="font-black text-xs px-1.5">{item.cantidad}</span>
+                  <button onClick={() => modificarCantidad(item.id, 1)} className="p-1 bg-white rounded-lg hover:bg-slate-200 shadow-sm"><Plus size={13}/></button>
                 </div>
-                <span className="text-2xl font-black text-blue-600">${(item.precio * item.cantidad).toLocaleString()}</span>
+                <span className="text-xl font-black text-blue-600 w-24 text-right">${(item.precio * item.cantidad).toLocaleString()}</span>
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* COLUMNA DERECHA ORIGINAL: TOTAL Y COBRO */}
-      <div className="w-[380px] bg-white p-5 flex flex-col justify-between border-l border-slate-200">
+      {/* SECCIÓN LATERAL DERECHA (ANCHO ADAPTATIVO FLUIDO) */}
+      <div className="w-[310px] xl:w-[360px] flex-shrink-0 bg-white p-4 flex flex-col justify-between border-l border-slate-200">
         <div>
-          <div className="bg-[#0f172a] text-white p-6 rounded-2xl mb-4 text-center">
-            <span className="text-xs tracking-wider uppercase font-extrabold text-slate-400 block mb-1">TOTAL A COBRAR</span>
-            <span className="text-5xl font-black text-[#10b981]">${total.toLocaleString()}</span>
+          <div className="bg-[#0f172a] text-white p-4 rounded-2xl mb-3 text-center shadow-sm">
+            <span className="text-[11px] tracking-wider uppercase font-extrabold text-slate-400 block mb-0.5">TOTAL A COBRAR</span>
+            <span className="text-4xl xl:text-5xl font-black text-[#10b981]">${total.toLocaleString()}</span>
           </div>
 
-          <label className="text-sm font-bold text-slate-700 block mb-1">¿Con cuánto paga? (Efectivo)</label>
-          <div className="relative mb-3">
+          <label className="text-xs font-bold text-slate-700 block mb-1">¿Con cuánto paga? (Efectivo)</label>
+          <div className="relative mb-2.5">
             <input
               type="number"
               value={montoRecibido}
               onChange={(e) => setMontoRecibido(e.target.value)}
               placeholder="0"
-              className="w-full text-2xl font-black p-3 rounded-xl border border-slate-300 text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full text-xl font-black p-2.5 rounded-xl border border-slate-300 text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
 
           {recibidoNum > total && (
-            <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl mb-3 text-center">
-              <span className="text-xs font-bold text-amber-700 block uppercase">Vuelto a entregar</span>
-              <span className="text-2xl font-black text-amber-900">${vuelto.toLocaleString()}</span>
+            <div className="bg-amber-50 border border-amber-200 p-2 rounded-xl mb-2 text-center">
+              <span className="text-[11px] font-bold text-amber-700 block uppercase">Vuelto a entregar</span>
+              <span className="text-xl font-black text-amber-900">${vuelto.toLocaleString()}</span>
             </div>
           )}
         </div>
 
-        {/* BOTONERA DE COBRO ORIGINAL */}
-        <div className="space-y-2.5">
+        {/* ACCIONES DE COBRO */}
+        <div className="space-y-2">
           <button
             onClick={() => procesarCobro('efectivo')}
             disabled={cargando || items.length === 0}
-            className="w-full bg-[#10b981] hover:bg-[#059669] disabled:opacity-50 text-white font-black text-xl py-4 rounded-2xl flex items-center justify-center gap-2 transition"
+            className="w-full bg-[#10b981] hover:bg-[#059669] disabled:opacity-50 text-white font-black text-lg py-3.5 rounded-2xl flex items-center justify-center gap-2 transition shadow-sm"
           >
-            <DollarSign size={24} /> COBRAR EFECTIVO
+            <DollarSign size={22} /> COBRAR EFECTIVO
           </button>
 
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => procesarCobro('tarjeta')}
               disabled={cargando || items.length === 0}
-              className="bg-[#6366f1] hover:bg-[#4f46e5] disabled:opacity-50 text-white font-bold text-sm py-3 rounded-xl flex items-center justify-center gap-1.5 transition"
+              className="bg-[#6366f1] hover:bg-[#4f46e5] disabled:opacity-50 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition"
             >
-              <CreditCard size={18} /> Tarjeta
+              <CreditCard size={16} /> Tarjeta
             </button>
             <button
               onClick={() => procesarCobro('transferencia')}
               disabled={cargando || items.length === 0}
-              className="bg-[#0ea5e9] hover:bg-[#0284c7] disabled:opacity-50 text-white font-bold text-sm py-3 rounded-xl flex items-center justify-center gap-1.5 transition"
+              className="bg-[#0ea5e9] hover:bg-[#0284c7] disabled:opacity-50 text-white font-bold text-xs py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition"
             >
-              <Smartphone size={18} /> Transf. / QR
+              <Smartphone size={16} /> Transf. / QR
             </button>
           </div>
 
           <button
             onClick={() => setModalMixto(true)}
             disabled={cargando || items.length === 0}
-            className="w-full bg-[#a855f7] hover:bg-[#9333ea] disabled:opacity-50 text-white font-bold text-base py-3.5 rounded-xl flex items-center justify-center gap-2 transition"
+            className="w-full bg-[#a855f7] hover:bg-[#9333ea] disabled:opacity-50 text-white font-bold text-sm py-3 rounded-xl flex items-center justify-center gap-2 transition"
           >
-            <Split size={20} /> Dividir / Pago Mixto
+            <Split size={18} /> Dividir / Pago Mixto
           </button>
 
           <button
             onClick={() => { setItems([]); setMontoRecibido(''); }}
             disabled={items.length === 0}
-            className="w-full bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-600 font-bold text-sm py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition"
+            className="w-full bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-600 font-bold text-xs py-2 rounded-xl flex items-center justify-center gap-1.5 transition"
           >
-            <Trash2 size={16} /> Cancelar / Nueva Venta
+            <Trash2 size={15} /> Cancelar / Nueva Venta
           </button>
         </div>
       </div>

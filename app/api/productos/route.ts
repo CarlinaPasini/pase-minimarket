@@ -16,7 +16,7 @@ export async function GET(request: Request) {
          FROM productos 
          WHERE activo = TRUE 
          ORDER BY nombre ASC 
-         LIMIT 100`
+         LIMIT 80000`
       );
       return NextResponse.json(res.rows);
     }
