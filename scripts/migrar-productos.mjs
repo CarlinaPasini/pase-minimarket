@@ -1,17 +1,5 @@
 import sqlite3 from 'sqlite3';
-import pg from 'pg';
-
-const { Pool } = pg;
-
-// Conexión directa al pooler de Supabase con tu contraseña y región correcta
-const pgPool = new Pool({
-  user: 'postgres.vzopwjvuanjwgbbfsfor',
-  host: 'aws-1-us-west-2.pooler.supabase.com',
-  database: 'postgres',
-  password: 'Ismaluana.1',
-  port: 6543,
-  ssl: { rejectUnauthorized: false },
-});
+import fs from 'fs';
 
 const sqliteDb = new sqlite3.Database('./aronium.db', sqlite3.OPEN_READONLY, (err) => {
   if (err) {
@@ -21,89 +9,65 @@ const sqliteDb = new sqlite3.Database('./aronium.db', sqlite3.OPEN_READONLY, (er
   console.log('✅ Conectado a aronium.db (SQLite)');
 });
 
-async function limpiarYMigrar() {
-  console.log('☁️ Conectando a Supabase y preparando catálogo...');
-  
-  try {
-    await pgPool.query('TRUNCATE TABLE productos CASCADE');
-    console.log('🧹 Tabla productos vaciada en la nube.');
-  } catch (err) {
-    console.log('Aviso al limpiar:', err.message);
+const querySqlite = `
+  SELECT 
+    p.Id,
+    p.Name AS nombre,
+    p.Price AS precio_venta,
+    COALESCE(p.Cost, 0) AS precio_costo,
+    COALESCE(
+      (SELECT GROUP_CONCAT(DISTINCT b.Value) FROM Barcode b WHERE b.ProductId = p.Id),
+      p.Code,
+      ''
+    ) AS codigo_barras,
+    COALESCE(
+      (SELECT SUM(s.Quantity) FROM Stock s WHERE s.ProductId = p.Id),
+      0
+    ) AS stock
+  FROM Product p
+  WHERE p.IsEnabled = 1 
+    AND p.Name NOT LIKE 'DELETED%' 
+    AND p.Name NOT LIKE 'delete%'
+    AND p.Name NOT LIKE 'd%'
+  GROUP BY p.Id
+`;
+
+sqliteDb.all(querySqlite, [], (err, rows) => {
+  if (err) {
+    console.error('❌ Error leyendo SQLite:', err);
+    return;
   }
 
-  const querySqlite = `
-    SELECT 
-      p.Id,
-      p.Name AS nombre,
-      p.Price AS precio_venta,
-      COALESCE(p.Cost, 0) AS precio_costo,
-      COALESCE(
-        (SELECT b.Value FROM Barcode b WHERE b.ProductId = p.Id ORDER BY b.Id DESC LIMIT 1),
-        p.Code,
-        ''
-      ) AS codigo_barras,
-      COALESCE(
-        (SELECT SUM(s.Quantity) FROM Stock s WHERE s.ProductId = p.Id),
-        0
-      ) AS stock
-    FROM Product p
-    WHERE p.IsEnabled = 1 
-      AND p.Name NOT LIKE 'DELETED%' 
-      AND p.Name NOT LIKE 'delete%'
-      AND p.Name NOT LIKE 'd%'
-    GROUP BY p.Id
-  `;
+  console.log(`📦 Procesando ${rows.length} productos...`);
 
-  sqliteDb.all(querySqlite, [], async (err, rows) => {
-    if (err) {
-      console.error('❌ Error consultando SQLite:', err);
-      return;
+  const sqlStatements = [];
+  sqlStatements.push('-- Actualización masiva de códigos concatenados por coma');
+
+  for (const item of rows) {
+    let codigos = [];
+    if (item.codigo_barras) {
+      codigos = String(item.codigo_barras)
+        .split(',')
+        .map((c) => c.trim())
+        .filter((c) => c.length > 0);
+    }
+    if (codigos.length === 0) {
+      codigos.push('20' + String(item.Id).padStart(10, '0') + '0');
     }
 
-    console.log(`📦 Encontrados ${rows.length} artículos únicos. Subiendo a Supabase...`);
-    let migrados = 0;
-    let omitidos = 0;
+    const codigosFinal = Array.from(new Set(codigos)).join(', ').replace(/'/g, "''");
+    const nombreLimpio = item.nombre.trim().replace(/'/g, "''");
 
-    for (const item of rows) {
-      let codigo = item.codigo_barras ? String(item.codigo_barras).trim() : '';
+    sqlStatements.push(
+      `UPDATE productos SET codigo_barras = '${codigosFinal}' WHERE LOWER(TRIM(nombre)) = LOWER(TRIM('${nombreLimpio}'));`
+    );
+  }
 
-      if (!codigo) {
-        codigo = '20' + String(item.Id).padStart(10, '0') + '0';
-      }
+  fs.writeFileSync('./actualizar_codigos.sql', sqlStatements.join('\n'), 'utf-8');
 
-      try {
-        await pgPool.query(
-          `INSERT INTO productos (codigo_barras, nombre, precio_costo, precio_venta, stock, activo)
-           VALUES ($1, $2, $3, $4, $5, TRUE)
-           ON CONFLICT (codigo_barras) DO UPDATE 
-           SET nombre = EXCLUDED.nombre,
-               precio_costo = EXCLUDED.precio_costo,
-               precio_venta = EXCLUDED.precio_venta,
-               stock = EXCLUDED.stock,
-               activo = TRUE`,
-          [
-            codigo,
-            item.nombre.trim(),
-            parseFloat(item.precio_costo) || 0,
-            parseFloat(item.precio_venta) || 0,
-            parseFloat(item.stock) || 0,
-          ]
-        );
-        migrados++;
-      } catch (pgErr) {
-        omitidos++;
-      }
-    }
+  console.log('\n========================================');
+  console.log('✅ ¡ARCHIVO actualizar_codigos.sql GENERADO CON ÉXITO!');
+  console.log('========================================\n');
 
-    console.log('\n========================================');
-    console.log('☁️ ¡MIGRACIÓN A SUPABASE EXITOSA!');
-    console.log(`   ✔️ Productos cargados en la nube: ${migrados}`);
-    if (omitidos > 0) console.log(`   ⚠️ Duplicados u omitidos: ${omitidos}`);
-    console.log('========================================\n');
-
-    sqliteDb.close();
-    await pgPool.end();
-  });
-}
-
-limpiarYMigrar();
+  sqliteDb.close();
+});

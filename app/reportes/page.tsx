@@ -2,498 +2,444 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, RefreshCw, X, ShoppingBag, Eye, Calendar, Clock, UserCheck } from 'lucide-react';
+import { PackagePlus, RefreshCw, CheckCircle, AlertCircle, Barcode, Edit2, Trash2, ArrowLeft, Search, Percent } from 'lucide-react';
 
-interface TurnoAuditoria {
-  id: number;
-  fecha_apertura: string;
-  fecha_cierre: string | null;
-  monto_inicial: string | number;
-  monto_esperado: string | number | null;
-  monto_final_declarado: string | number | null;
-  diferencia_arqueo: string | number | null;
-  estado: string;
-  cajero: string;
-  rol: string;
-  total_ventas: string | number;
-  cantidad_ventas: string | number;
-}
-
-interface ItemDetalleTurno {
-  venta_id: string;
-  fecha: string;
-  total_venta: string | number;
-  metodo_pago: string;
-  producto: string;
-  codigo_barras: string;
-  cantidad: number;
-  precio_unitario: string | number;
-  subtotal: string | number;
-}
-
-interface VentaItem {
+interface Producto {
   id: string;
-  fecha: string;
-  total: string | number;
-  metodo_pago: string;
-  turno_id: number;
-  cajero: string;
+  codigo_barras: string;
+  nombre: string;
+  precio_costo: number;
+  precio_venta: number;
+  stock: number;
 }
 
-export default function PantallaReportes() {
-  const [turnos, setTurnos] = useState<TurnoAuditoria[]>([]);
-  const [ventas, setVentas] = useState<VentaItem[]>([]);
-  const [cajeroFiltro, setCajeroFiltro] = useState('todos');
-  const [pestaña, setPestaña] = useState<'turnos' | 'ventas'>('turnos');
+export default function GestionProductos() {
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [busqueda, setBusqueda] = useState('');
+  
+  // Estados del formulario
+  const [idEditando, setIdEditando] = useState<string | null>(null);
+  const [nombre, setNombre] = useState('');
+  const [codigoBarras, setCodigoBarras] = useState('');
+  const [precioCosto, setPrecioCosto] = useState('');
+  const [precioVenta, setPrecioVenta] = useState('');
+  const [stock, setStock] = useState('10');
+  
+  const [mensaje, setMensaje] = useState<{ tipo: 'ok' | 'error'; texto: string } | null>(null);
   const [cargando, setCargando] = useState(false);
 
-  // Estados para ver el detalle de productos de un turno seleccionado
-  const [turnoSeleccionado, setTurnoSeleccionado] = useState<TurnoAuditoria | null>(null);
-  const [itemsTurno, setItemsTurno] = useState<ItemDetalleTurno[]>([]);
-  const [cargandoDetalle, setCargandoDetalle] = useState(false);
-
-  const cargarDatos = async () => {
-    setCargando(true);
+  const cargarProductos = async (filtro = '') => {
     try {
-      const res = await fetch('/api/reportes');
-      if (res.ok) {
-        const data = await res.json();
-        setTurnos(data.turnos || []);
-        setVentas(data.ventas || []);
+      const url = filtro.trim() 
+        ? `/api/productos?codigo=${encodeURIComponent(filtro.trim())}` 
+        : '/api/productos';
+      const res = await fetch(url);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setProductos(data);
+      } else if (data && data.id) {
+        setProductos([data]);
+      } else {
+        setProductos([]);
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    cargarProductos();
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      cargarProductos(busqueda);
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [busqueda]);
+
+  // Cálculo de margen sobre costo: ((Venta - Costo) / Costo) * 100
+  const calcularMargen = (costo: number, venta: number) => {
+    if (!costo || costo <= 0 || !venta) return null;
+    return Math.round(((venta - costo) / costo) * 100);
+  };
+
+  const costoNum = parseFloat(precioCosto) || 0;
+  const ventaNum = parseFloat(precioVenta) || 0;
+  const margenFormulario = calcularMargen(costoNum, ventaNum);
+
+  const generarCodigoAutomatico = () => {
+    const correlativo = Math.floor(100000 + Math.random() * 900000);
+    const cuerpo = '20' + String(correlativo).padStart(10, '0');
+    let suma = 0;
+    for (let i = 0; i < 12; i++) {
+      const d = parseInt(cuerpo[i], 10);
+      suma += (i % 2 === 0) ? d : d * 3;
+    }
+    const residuo = suma % 10;
+    const verificador = residuo === 0 ? 0 : 10 - residuo;
+    const nuevoCodigo = `${cuerpo}${verificador}`;
+
+    if (codigoBarras.trim()) {
+      setCodigoBarras(`${codigoBarras.trim()}, ${nuevoCodigo}`);
+    } else {
+      setCodigoBarras(nuevoCodigo);
+    }
+  };
+
+  const seleccionarParaEditar = (prod: Producto) => {
+    setIdEditando(prod.id);
+    setNombre(prod.nombre);
+    setCodigoBarras(prod.codigo_barras || '');
+    setPrecioCosto(String(prod.precio_costo));
+    setPrecioVenta(String(prod.precio_venta));
+    setStock(String(prod.stock));
+    setMensaje(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const cancelarEdicion = () => {
+    setIdEditando(null);
+    setNombre('');
+    setCodigoBarras('');
+    setPrecioCosto('');
+    setPrecioVenta('');
+    setStock('10');
+    setMensaje(null);
+  };
+
+  const handleGuardar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMensaje(null);
+
+    if (!nombre.trim() || !precioVenta) {
+      setMensaje({ tipo: 'error', texto: 'El nombre y el precio de venta son requeridos.' });
+      return;
+    }
+
+    setCargando(true);
+    try {
+      const metodo = idEditando ? 'PUT' : 'POST';
+      const res = await fetch('/api/productos', {
+        method: metodo,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: idEditando,
+          codigo_barras: codigoBarras.trim() || null,
+          nombre: nombre.trim(),
+          precio_costo: parseFloat(precioCosto) || 0,
+          precio_venta: parseFloat(precioVenta),
+          stock: parseFloat(stock) || 0,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Error al guardar');
+      }
+
+      setMensaje({ 
+        tipo: 'ok', 
+        texto: idEditando ? '¡Producto actualizado correctamente!' : '¡Producto guardado exitosamente!' 
+      });
+      cancelarEdicion();
+      cargarProductos(busqueda);
+    } catch (err: any) {
+      setMensaje({ tipo: 'error', texto: err.message || 'Error en la operación' });
     } finally {
       setCargando(false);
     }
   };
 
-  useEffect(() => {
-    cargarDatos();
-  }, []);
+  const handleEliminar = async (id: string, nombreProd: string) => {
+    if (!confirm(`¿Seguro que deseas eliminar "${nombreProd}" del catálogo?`)) return;
 
-  const verDetalleTurno = async (turno: TurnoAuditoria) => {
-    setTurnoSeleccionado(turno);
-    setCargandoDetalle(true);
     try {
-      const res = await fetch(`/api/reportes?turno_id=${turno.id}`);
+      const res = await fetch(`/api/productos?id=${id}`, { method: 'DELETE' });
       if (res.ok) {
-        const data = await res.json();
-        setItemsTurno(data);
+        setMensaje({ tipo: 'ok', texto: `"${nombreProd}" eliminado del catálogo.` });
+        cargarProductos(busqueda);
       }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setCargandoDetalle(false);
+    } catch (e) {
+      console.error(e);
     }
   };
 
-  const cajerosDisponibles = Array.from(new Set(turnos.map((t) => t.cajero)));
-
-  const turnosFiltrados = cajeroFiltro === 'todos'
-    ? turnos
-    : turnos.filter((t) => t.cajero === cajeroFiltro);
-
-  const ventasFiltradas = cajeroFiltro === 'todos'
-    ? ventas
-    : ventas.filter((v) => v.cajero === cajeroFiltro);
-
-  const totalFacturado = turnosFiltrados.reduce((acc, t) => acc + parseFloat(String(t.total_ventas || 0)), 0);
-  const cajasAbiertas = turnos.filter((t) => t.estado === 'abierto').length;
-
   return (
     <div className="min-h-screen bg-slate-100 font-sans p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-
-        {/* Encabezado Superior con Logo PASE y Navegación de Dueño */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white p-4 rounded-2xl shadow-sm gap-4 border border-slate-200">
-          <div className="flex items-center gap-3">
-            <Link 
-              href="/caja" 
-              className="p-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 transition"
-              title="Volver a Caja"
-            >
-              <ArrowLeft size={20} />
-            </Link>
-            
-            <div className="w-10 h-10 rounded-full overflow-hidden bg-black flex-shrink-0 border border-slate-200 shadow-sm flex items-center justify-center">
-              <img src="/logo.jpeg" alt="PASE" className="w-full h-full object-cover" />
-            </div>
-
-            <div>
-              <h1 className="text-xl font-black text-slate-900 tracking-tight">PASE MINIMARKET — Control de Caja</h1>
-              <p className="text-xs text-slate-400">Supervisión de turnos, arqueos de empleados y ventas en vivo</p>
-            </div>
+      {/* Navegación Superior con Logo PASE */}
+      <div className="max-w-7xl mx-auto flex justify-between items-center bg-white p-4 rounded-2xl shadow-sm mb-6 border border-slate-200">
+        <div className="flex items-center gap-3">
+          <Link href="/caja" className="p-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-600 transition">
+            <ArrowLeft size={20} />
+          </Link>
+          
+          <div className="w-10 h-10 rounded-full overflow-hidden bg-black flex-shrink-0 border border-slate-200 shadow-sm flex items-center justify-center">
+            <img src="/logo.jpeg" alt="PASE" className="w-full h-full object-cover" />
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
-            <Link
-              href="/productos"
-              className="px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs transition"
-            >
-              Inventario
-            </Link>
-            <Link
-              href="/usuarios"
-              className="px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs transition"
-            >
-              Personal y PINs
-            </Link>
-
-            <select
-              value={cajeroFiltro}
-              onChange={(e) => setCajeroFiltro(e.target.value)}
-              className="p-2 bg-slate-50 border border-slate-300 rounded-xl font-bold text-xs text-slate-700"
-            >
-              <option value="todos">Todos los Empleados</option>
-              {cajerosDisponibles.map((nombre) => (
-                <option key={nombre} value={nombre}>{nombre}</option>
-              ))}
-            </select>
-
-            <button
-              onClick={cargarDatos}
-              disabled={cargando}
-              className="p-2 bg-black hover:bg-slate-800 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition"
-            >
-              <RefreshCw size={14} className={cargando ? 'animate-spin' : ''} /> Actualizar
-            </button>
-
-            <button
-              onClick={() => {
-                window.location.href = '/caja';
-              }}
-              className="p-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 rounded-xl font-bold text-xs transition"
-              title="Salir de la sesión y volver al PIN"
-            >
-              Salir
-            </button>
+          <div>
+            <h1 className="text-xl font-black text-slate-900 tracking-tight">PASE MINIMARKET — Catálogo y Stock</h1>
+            <p className="text-xs text-slate-400">Precios, costos, márgenes de ganancia e inventario</p>
           </div>
         </div>
-
-        {/* Tarjetas de Métricas */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-            <span className="text-xs uppercase font-bold text-slate-400">Total Facturado</span>
-            <p className="text-3xl font-black text-emerald-600 mt-1">${totalFacturado.toLocaleString()}</p>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-            <span className="text-xs uppercase font-bold text-slate-400">Cajas Operando Ahora</span>
-            <p className="text-3xl font-black text-blue-600 mt-1 flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
-              {cajasAbiertas} activa(s)
-            </p>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-            <span className="text-xs uppercase font-bold text-slate-400">Filtro de Empleado</span>
-            <p className="text-2xl font-black text-slate-800 mt-1 truncate">
-              {cajeroFiltro === 'todos' ? 'Todos los cajeros' : cajeroFiltro}
-            </p>
-          </div>
+        
+        <div className="flex gap-3">
+          <Link href="/caja" className="px-4 py-2 bg-black hover:bg-slate-800 text-white font-bold rounded-xl transition text-sm">
+            Ir a Caja Registradora
+          </Link>
+          <Link href="/etiquetas" className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl transition flex items-center gap-2 text-sm border border-slate-200">
+            <Barcode size={16} /> Etiquetas
+          </Link>
         </div>
-
-        {/* Selector de Pestañas */}
-        <div className="flex gap-2 border-b border-slate-200 pb-2">
-          <button
-            onClick={() => setPestaña('turnos')}
-            className={`px-5 py-2.5 rounded-xl font-black text-sm transition ${
-              pestaña === 'turnos' ? 'bg-slate-900 text-white shadow' : 'bg-white text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            Arqueos y Cajas por Turno ({turnosFiltrados.length})
-          </button>
-          <button
-            onClick={() => setPestaña('ventas')}
-            className={`px-5 py-2.5 rounded-xl font-black text-sm transition ${
-              pestaña === 'ventas' ? 'bg-slate-900 text-white shadow' : 'bg-white text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            Detalle Ticket por Ticket ({ventasFiltradas.length})
-          </button>
-        </div>
-
-        {/* TABLA DE TURNOS CON DÍA Y HORA */}
-        {pestaña === 'turnos' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-              <table className="w-full text-left text-sm border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase text-xs bg-slate-50">
-                    <th className="py-3 px-4">Turno</th>
-                    <th className="py-3 px-4">Cajero</th>
-                    <th className="py-3 px-4">Apertura (Día / Hora)</th>
-                    <th className="py-3 px-4">Cierre (Día / Hora)</th>
-                    <th className="py-3 px-4 text-right">Fondo Inicial</th>
-                    <th className="py-3 px-4 text-right">Ventas</th>
-                    <th className="py-3 px-4 text-right">Esperado</th>
-                    <th className="py-3 px-4 text-right">Contado</th>
-                    <th className="py-3 px-4 text-center">Diferencia</th>
-                    <th className="py-3 px-4 text-center">Estado</th>
-                    <th className="py-3 px-4 text-center">Acción</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {turnosFiltrados.length === 0 ? (
-                    <tr>
-                      <td colSpan={11} className="text-center py-8 text-slate-400 font-bold">
-                        No hay turnos registrados aún
-                      </td>
-                    </tr>
-                  ) : (
-                    turnosFiltrados.map((t) => {
-                      const dif = parseFloat(String(t.diferencia_arqueo || 0));
-                      return (
-                        <tr
-                          key={t.id}
-                          onClick={() => verDetalleTurno(t)}
-                          className="hover:bg-blue-50/60 cursor-pointer transition group"
-                        >
-                          <td className="py-3 px-4 font-black text-blue-600 group-hover:underline">#{t.id}</td>
-                          <td className="py-3 px-4 font-bold text-slate-800">
-                            {t.cajero}
-                            <span className="block text-xs font-normal text-slate-400 capitalize">{t.rol}</span>
-                          </td>
-                          <td className="py-3 px-4 text-xs font-mono text-slate-600 whitespace-nowrap">
-                            <span className="font-bold text-slate-800">
-                              {new Date(t.fecha_apertura).toLocaleDateString([], { day: '2-digit', month: '2-digit' })}
-                            </span>{' '}
-                            {new Date(t.fecha_apertura).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </td>
-                          <td className="py-3 px-4 text-xs font-mono text-slate-600 whitespace-nowrap">
-                            {t.fecha_cierre ? (
-                              <>
-                                <span className="font-bold text-slate-800">
-                                  {new Date(t.fecha_cierre).toLocaleDateString([], { day: '2-digit', month: '2-digit' })}
-                                </span>{' '}
-                                {new Date(t.fecha_cierre).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                              </>
-                            ) : (
-                              <span className="text-slate-400">-</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-right font-mono font-bold text-slate-700">
-                            ${parseFloat(String(t.monto_inicial)).toLocaleString()}
-                          </td>
-                          <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600">
-                            ${parseFloat(String(t.total_ventas)).toLocaleString()} ({t.cantidad_ventas})
-                          </td>
-                          <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">
-                            {t.monto_esperado ? `$${parseFloat(String(t.monto_esperado)).toLocaleString()}` : '-'}
-                          </td>
-                          <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">
-                            {t.monto_final_declarado ? `$${parseFloat(String(t.monto_final_declarado)).toLocaleString()}` : '-'}
-                          </td>
-                          <td className="py-3 px-4 text-center whitespace-nowrap">
-                            {t.estado === 'abierto' ? (
-                              <span className="text-xs text-slate-400 italic">En curso</span>
-                            ) : dif === 0 ? (
-                              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-black rounded-lg text-xs">
-                                Exacto ($0)
-                              </span>
-                            ) : dif < 0 ? (
-                              <span className="px-2 py-0.5 bg-rose-100 text-rose-800 font-black rounded-lg text-xs">
-                                Faltante: ${Math.abs(dif).toLocaleString()}
-                              </span>
-                            ) : (
-                              <span className="px-2 py-0.5 bg-amber-100 text-amber-800 font-black rounded-lg text-xs">
-                                Sobrante: +${dif.toLocaleString()}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-black uppercase ${
-                              t.estado === 'abierto' ? 'bg-emerald-100 text-emerald-700 animate-pulse' : 'bg-slate-200 text-slate-600'
-                            }`}>
-                              {t.estado}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition">
-                              <Eye size={14} /> Ver artículos
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* TABLA DE VENTAS INDIVIDUALES */}
-        {pestaña === 'ventas' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-              <table className="w-full text-left text-sm border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase text-xs bg-slate-50">
-                    <th className="py-3 px-4">Fecha / Hora</th>
-                    <th className="py-3 px-4">Cajero</th>
-                    <th className="py-3 px-4">Turno</th>
-                    <th className="py-3 px-4">Método de Pago</th>
-                    <th className="py-3 px-4 text-right">Total Cobrado</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {ventasFiltradas.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="text-center py-8 text-slate-400 font-bold">
-                        No hay ventas registradas
-                      </td>
-                    </tr>
-                  ) : (
-                    ventasFiltradas.map((v) => (
-                      <tr key={v.id} className="hover:bg-slate-50 transition">
-                        <td className="py-3 px-4 font-mono text-slate-600 whitespace-nowrap">
-                          {new Date(v.fecha).toLocaleString()}
-                        </td>
-                        <td className="py-3 px-4 font-bold text-slate-800">{v.cajero}</td>
-                        <td className="py-3 px-4 font-bold text-slate-500">#{v.turno_id || '-'}</td>
-                        <td className="py-3 px-4">
-                          <span className="px-2.5 py-1 bg-slate-100 rounded-lg text-xs font-black uppercase text-slate-700">
-                            {v.metodo_pago}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-right font-black text-lg text-slate-900">
-                          ${parseFloat(String(v.total)).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
       </div>
 
-      {/* MODAL DETALLE DE PRODUCTOS VENDIDOS EN EL TURNO SELECCIONADO */}
-      {turnoSeleccionado && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-3xl rounded-3xl p-6 shadow-2xl flex flex-col max-h-[85vh]">
-            
-            {/* Cabecera del modal */}
-            <div className="flex justify-between items-start border-b pb-4 mb-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-2xl font-black text-slate-800">
-                    Detalle del Turno #{turnoSeleccionado.id}
-                  </h2>
-                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-black uppercase ${
-                    turnoSeleccionado.estado === 'abierto' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
-                  }`}>
-                    {turnoSeleccionado.estado}
-                  </span>
-                </div>
-                <p className="text-sm text-slate-500 mt-1">
-                  Cajero: <b className="text-slate-800">{turnoSeleccionado.cajero}</b> ({turnoSeleccionado.rol})
-                </p>
-              </div>
-              <button
-                onClick={() => setTurnoSeleccionado(null)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition"
-              >
-                <X size={24} />
-              </button>
-            </div>
+      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Formulario */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm lg:col-span-1 h-fit sticky top-6 border border-slate-200">
+          <h2 className="text-xl font-bold text-slate-800 mb-1 flex items-center gap-2">
+            <PackagePlus className="text-blue-600" /> 
+            {idEditando ? 'Modificar Producto' : 'Cargar Producto Nuevo'}
+          </h2>
+          <p className="text-xs text-slate-400 mb-4">
+            {idEditando ? 'Edite los precios o stock y guarde los cambios.' : 'Agregue nuevos productos al sistema sin usar la base.'}
+          </p>
 
-            {/* Resumen monetario del turno */}
-            <div className="grid grid-cols-3 gap-3 mb-4 bg-slate-50 p-3.5 rounded-2xl border text-sm">
-              <div>
-                <span className="text-xs text-slate-400 font-bold uppercase block">Fondo Inicial</span>
-                <span className="text-lg font-black text-slate-700">
-                  ${parseFloat(String(turnoSeleccionado.monto_inicial)).toLocaleString()}
-                </span>
-              </div>
-              <div>
-                <span className="text-xs text-slate-400 font-bold uppercase block">Total Vendido</span>
-                <span className="text-lg font-black text-emerald-600">
-                  ${parseFloat(String(turnoSeleccionado.total_ventas)).toLocaleString()}
-                </span>
-              </div>
-              <div>
-                <span className="text-xs text-slate-400 font-bold uppercase block">Operaciones</span>
-                <span className="text-lg font-black text-slate-800">
-                  {turnoSeleccionado.cantidad_ventas} ticket(s)
-                </span>
-              </div>
+          {mensaje && (
+            <div className={`p-3 rounded-xl mb-4 text-sm font-bold flex items-center gap-2 ${mensaje.tipo === 'ok' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+              {mensaje.tipo === 'ok' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+              {mensaje.texto}
             </div>
+          )}
 
-            {/* Listado de artículos vendidos con fecha y hora completa */}
-            <div className="flex-1 overflow-y-auto border border-slate-200 rounded-2xl">
-              {cargandoDetalle ? (
-                <div className="p-8 text-center text-slate-400 font-bold flex items-center justify-center gap-2">
-                  <RefreshCw size={18} className="animate-spin" /> Cargando productos vendidos...
+          <form onSubmit={handleGuardar} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold uppercase text-slate-500 mb-1">
+                Código(s) de Barras <span className="font-normal text-slate-400">(Separe con coma si tiene varios)</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={codigoBarras}
+                  onChange={(e) => setCodigoBarras(e.target.value)}
+                  placeholder="Ej: 77912345, 77998765..."
+                  className="w-full p-2.5 rounded-xl border border-slate-300 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={generarCodigoAutomatico}
+                  className="px-3 bg-slate-200 hover:bg-slate-300 rounded-xl transition"
+                  title="Generar código automático EAN-13"
+                >
+                  <RefreshCw size={16} />
+                </button>
+              </div>
+
+              {codigoBarras.includes(',') && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {codigoBarras.split(',').map((c, i) => c.trim() && (
+                    <span key={i} className="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded text-[11px] font-mono font-bold">
+                      {c.trim()}
+                    </span>
+                  ))}
                 </div>
-              ) : itemsTurno.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 font-bold">
-                  Este turno no registró ventas de artículos todavía.
-                </div>
-              ) : (
-                <table className="w-full text-left text-sm border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase text-xs bg-slate-50 sticky top-0">
-                      <th className="py-2.5 px-3">Fecha y Hora</th>
-                      <th className="py-2.5 px-3">Artículo Vendido</th>
-                      <th className="py-2.5 px-3 text-center">Pago</th>
-                      <th className="py-2.5 px-3 text-right">Cant.</th>
-                      <th className="py-2.5 px-3 text-right">Unitario</th>
-                      <th className="py-2.5 px-3 text-right">Subtotal</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {itemsTurno.map((item, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50">
-                        <td className="py-2.5 px-3 text-xs font-mono text-slate-600 whitespace-nowrap">
-                          <span className="font-bold text-slate-800">
-                            {new Date(item.fecha).toLocaleDateString([], { day: '2-digit', month: '2-digit' })}
-                          </span>{' '}
-                          {new Date(item.fecha).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <p className="font-bold text-slate-800">{item.producto}</p>
-                          <span className="text-xs font-mono text-slate-400">{item.codigo_barras}</span>
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
-                          <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-xs font-bold rounded capitalize">
-                            {item.metodo_pago}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-black text-slate-800">
-                          {item.cantidad}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono text-slate-600">
-                          ${parseFloat(String(item.precio_unitario)).toLocaleString()}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-black text-slate-900 font-mono">
-                          ${parseFloat(String(item.subtotal)).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               )}
             </div>
 
-            {/* Pie del modal */}
-            <div className="pt-4 mt-2 flex justify-end">
-              <button
-                onClick={() => setTurnoSeleccionado(null)}
-                className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-sm transition"
-              >
-                Cerrar Detalle
-              </button>
+            <div>
+              <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Nombre / Descripción</label>
+              <input
+                type="text"
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                placeholder="Ej: Alfajor Jorgito Chocolate"
+                className="w-full p-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
             </div>
 
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Precio Costo ($)</label>
+                <input
+                  type="number"
+                  value={precioCosto}
+                  onChange={(e) => setPrecioCosto(e.target.value)}
+                  placeholder="0"
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Precio Venta ($)</label>
+                <input
+                  type="number"
+                  value={precioVenta}
+                  onChange={(e) => setPrecioVenta(e.target.value)}
+                  placeholder="0"
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-sm font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* MARGEN DE GANANCIA CALCULADO EN VIVO */}
+            {margenFormulario !== null && (
+              <div className={`p-2.5 rounded-xl text-xs font-bold flex justify-between items-center ${
+                margenFormulario >= 30 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
+                margenFormulario >= 15 ? 'bg-amber-50 text-amber-800 border border-amber-200' :
+                'bg-rose-50 text-rose-800 border border-rose-200'
+              }`}>
+                <span className="flex items-center gap-1"><Percent size={14} /> Margen Ganancia s/ Costo:</span>
+                <span className="text-sm font-black">+{margenFormulario}%</span>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Stock Disponible</label>
+              <input
+                type="number"
+                value={stock}
+                onChange={(e) => setStock(e.target.value)}
+                className="w-full p-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              {idEditando && (
+                <button
+                  type="button"
+                  onClick={cancelarEdicion}
+                  className="w-1/3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-3 rounded-xl transition"
+                >
+                  Cancelar
+                </button>
+              )}
+              <button
+                type="submit"
+                disabled={cargando}
+                className={`w-full font-bold py-3 rounded-xl transition shadow active:scale-95 ${
+                  idEditando ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
+              >
+                {cargando ? 'Procesando...' : idEditando ? 'Guardar Cambios' : 'Registrar Producto'}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Listado de Inventario */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm lg:col-span-2 flex flex-col border border-slate-200">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+            <h2 className="text-xl font-bold text-slate-800">Catálogo ({productos.length})</h2>
+            
+            <div className="relative w-full sm:w-72">
+              <input
+                type="text"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                placeholder="Buscar por nombre o código..."
+                className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                autoFocus
+              />
+              <Search size={16} className="absolute left-3 top-2.5 text-slate-400" />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+            <table className="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase text-xs bg-slate-50 sticky top-0">
+                  <th className="py-2.5 px-3">Código(s)</th>
+                  <th className="py-2.5 px-3">Descripción</th>
+                  <th className="py-2.5 px-3 text-right">Costo</th>
+                  <th className="py-2.5 px-3 text-right">Venta</th>
+                  <th className="py-2.5 px-3 text-center">% Ganancia</th>
+                  <th className="py-2.5 px-3 text-right">Stock</th>
+                  <th className="py-2.5 px-3 text-center">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {productos.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="text-center py-8 text-slate-400 font-bold">
+                      No se encontraron productos con esa descripción o código.
+                    </td>
+                  </tr>
+                ) : (
+                  productos.map((prod) => {
+                    const c = parseFloat(String(prod.precio_costo || 0));
+                    const v = parseFloat(String(prod.precio_venta || 0));
+                    const m = calcularMargen(c, v);
+
+                    return (
+                      <tr key={prod.id} className="hover:bg-slate-50 transition">
+                        <td className="py-3 px-3 font-mono text-xs text-slate-700">
+                          <div className="flex flex-wrap gap-1 max-w-[200px]">
+                            {prod.codigo_barras ? (
+                              prod.codigo_barras.split(',').map((cod: string, idx: number) => (
+                                <span 
+                                  key={idx} 
+                                  className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[11px] font-semibold text-slate-700 whitespace-nowrap"
+                                >
+                                  {cod.trim()}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-slate-400 italic">Sin código</span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="py-3 px-3 font-semibold text-slate-800">{prod.nombre}</td>
+                        <td className="py-3 px-3 text-right font-mono text-slate-500">${c.toLocaleString()}</td>
+                        <td className="py-3 px-3 text-right font-black text-slate-900">${v.toLocaleString()}</td>
+                        
+                        {/* COLUMNA % MARGEN */}
+                        <td className="py-3 px-3 text-center">
+                          {m !== null ? (
+                            <span className={`px-2 py-0.5 rounded-lg text-xs font-black ${
+                              m >= 35 ? 'bg-emerald-100 text-emerald-800' :
+                              m >= 15 ? 'bg-amber-100 text-amber-800' :
+                              'bg-rose-100 text-rose-800'
+                            }`}>
+                              +{m}%
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 font-mono text-xs">-</span>
+                          )}
+                        </td>
+
+                        <td className="py-3 px-3 text-right">
+                          <span className={`px-2 py-0.5 rounded-lg text-xs font-black ${Number(prod.stock) <= 5 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700'}`}>
+                            {prod.stock}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <div className="flex justify-center gap-1.5">
+                            <button
+                              onClick={() => seleccionarParaEditar(prod)}
+                              className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg transition"
+                              title="Modificar precio o stock"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleEliminar(prod.id, prod.nombre)}
+                              className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg transition"
+                              title="Eliminar del catálogo"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
-      )}
-
+      </div>
     </div>
   );
 }
